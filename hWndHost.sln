@@ -1,0 +1,67 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.21005.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "hWndHost", "hWndHost\hWndHost.vbproj", "{D633F93C-DB74-4A5D-9D1F-638C58BBA2CC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Logo", "Logo\Logo.csproj", "{61AECEE9-47BA-4E25-AA13-1E57255CC0A6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Touch", "Touch\Touch.csproj", "{C7B9739A-112E-4CEA-AB15-4E37BC288E8B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fish", "Fish\Fish.csproj", "{33E0B6FF-96D2-4BCE-A9DB-19193B72A8F8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lissajous", "Lissajous\Lissajous.csproj", "{94C82B90-5D02-4372-BAFE-2941E525DF0A}"
+EndProject
+Global
+	GlobalSection(TeamFoundationVersionControl) = preSolution
+		SccNumberOfProjects = 6
+		SccEnterpriseProvider = {4CA58AB2-18FA-4F8D-95D4-32DDF27D184C}
+		SccTeamFoundationServer = http://vstfdevdiv:8080/devdiv2
+		SccLocalPath0 = .
+		SccProjectUniqueName1 = hWndHost\\hWndHost.vbproj
+		SccProjectName1 = hWndHost
+		SccLocalPath1 = hWndHost
+		SccProjectUniqueName2 = Logo\\Logo.csproj
+		SccProjectName2 = Logo
+		SccLocalPath2 = Logo
+		SccProjectUniqueName3 = Touch\\Touch.csproj
+		SccProjectName3 = Touch
+		SccLocalPath3 = Touch
+		SccProjectUniqueName4 = Fish\\Fish.csproj
+		SccProjectName4 = Fish
+		SccLocalPath4 = Fish
+		SccProjectUniqueName5 = Lissajous\\Lissajous.csproj
+		SccProjectName5 = Lissajous
+		SccLocalPath5 = Lissajous
+	EndGlobalSection
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D633F93C-DB74-4A5D-9D1F-638C58BBA2CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D633F93C-DB74-4A5D-9D1F-638C58BBA2CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D633F93C-DB74-4A5D-9D1F-638C58BBA2CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D633F93C-DB74-4A5D-9D1F-638C58BBA2CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{61AECEE9-47BA-4E25-AA13-1E57255CC0A6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{61AECEE9-47BA-4E25-AA13-1E57255CC0A6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{61AECEE9-47BA-4E25-AA13-1E57255CC0A6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{61AECEE9-47BA-4E25-AA13-1E57255CC0A6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7B9739A-112E-4CEA-AB15-4E37BC288E8B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7B9739A-112E-4CEA-AB15-4E37BC288E8B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7B9739A-112E-4CEA-AB15-4E37BC288E8B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7B9739A-112E-4CEA-AB15-4E37BC288E8B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{33E0B6FF-96D2-4BCE-A9DB-19193B72A8F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{33E0B6FF-96D2-4BCE-A9DB-19193B72A8F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{33E0B6FF-96D2-4BCE-A9DB-19193B72A8F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{33E0B6FF-96D2-4BCE-A9DB-19193B72A8F8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{94C82B90-5D02-4372-BAFE-2941E525DF0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{94C82B90-5D02-4372-BAFE-2941E525DF0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{94C82B90-5D02-4372-BAFE-2941E525DF0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{94C82B90-5D02-4372-BAFE-2941E525DF0A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

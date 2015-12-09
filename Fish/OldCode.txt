@@ -1,0 +1,338 @@
+﻿#define ROW 24
+#define COL 80
+#define N (COL*ROW)
+#define CSHARK 'O'
+#define CFISH 'ú'
+
+char w[N],st[N],fm[N],sm[N];
+char attr=6;
+int vidport=0x3d8,dispseg=0xb800;
+int fbreed,sbreed,nfish,nsharks,starve,order[4],tick;
+int mins=10000,minf=10000;
+int maxf,maxs;
+
+movethem() {
+  int i,dir,born,ate,temp;
+  char *p;
+  for (p=w,i=0 ; i<COL ; i++,p++) {
+    if (*p && *p<128) {           /*shark top*/
+      if (!(--st[i])) {     /*starves?*/
+        sm[i]=128;
+        nsharks--;
+        continue;
+      }
+      randord();
+      ate=born=0;
+      if (!--*p) born=*p=sbreed;
+      for (dir=0 ; dir<4 ; dir++) {
+        if ((temp=i+order[dir]) < 0) temp+=N;
+        if (w[temp] > 127 && !(sm[temp] & 0x7f)) {
+          ate=st[temp]=starve;                   /*eat a fish!*/
+          sm[temp]=*p;
+          nfish--;                         /*eliminate this fish*/
+          if (!born) {
+            sm[i]=128;
+            st[i]=0;                            /*necessary?*/
+          } else nsharks++;
+          break;
+        }
+      }
+      if (!ate) {         /*if he can't eat, can he move?*/
+        for (dir=0 ; dir<4 ; dir++) {
+          if ((temp=i+order[dir]) < 0) temp+=N;
+          if (!w[temp] && !sm[temp]) {
+            sm[temp]=*p;
+            st[temp]=st[i];   /*same hunger level*/
+            if (!born) {
+              sm[i]=128;
+              st[i]=0;                          /*necessary?*/
+            } else nsharks++;
+            break;
+          }
+        }
+      }
+    }
+  }
+  for ( ; i<(N-COL) ; i++,p++) {
+    if (*p && *p<128) {           /*shark middle*/
+      if (!(--st[i])) {     /*starves?*/
+        sm[i]=128;
+        nsharks--;
+        continue;
+      }
+      randord();
+      ate=born=0;
+      if (!--*p) born=*p=sbreed;
+      for (dir=0 ; dir<4 ; dir++) {
+        if (w[temp=i+order[dir]] > 127 && !(sm[temp] & 0x7f)) {
+          ate=st[temp]=starve;                   /*eat a fish!*/
+          sm[temp]=*p;
+          nfish--;                         /*eliminate this fish*/
+          if (!born) {
+            sm[i]=128;
+            st[i]=0;                            /*necessary?*/
+          } else nsharks++;
+          break;
+        }
+      }
+      if (!ate) {         /*if he can't eat, can he move?*/
+        for (dir=0 ; dir<4 ; dir++) {
+          if (!w[temp=i+order[dir]] && !sm[temp]) {
+            sm[temp]=*p;
+            st[temp]=st[i];   /*same hunger level*/
+            if (!born) {
+              sm[i]=128;
+              st[i]=0;                          /*necessary?*/
+            } else nsharks++;
+            break;
+          }
+        }
+      }
+    }
+  }
+  for ( ; i<N ; i++,p++) {
+    if (*p && *p<128) {           /*shark bottom*/
+      if (!(--st[i])) {     /*starves?*/
+        sm[i]=128;
+        nsharks--;
+        continue;
+      }
+      randord();
+      ate=born=0;
+      if (!--*p) born=*p=sbreed;
+      for (dir=0 ; dir<4 ; dir++) {
+        if ((temp=i+order[dir]) >= N) temp-=N;
+        if (w[temp] > 127 && !(sm[temp] & 0x7f)) {
+          ate=st[temp]=starve;                   /*eat a fish!*/
+          sm[temp]=*p;
+          nfish--;                         /*eliminate this fish*/
+          if (!born) {
+            sm[i]=128;
+            st[i]=0;                            /*necessary?*/
+          } else nsharks++;
+          break;
+        }
+      }
+      if (!ate) {         /*if he can't eat, can he move?*/
+        for (dir=0 ; dir<4 ; dir++) {
+          if ((temp=i+order[dir]) >= N) temp-=N;
+          if (!w[temp] && !sm[temp]) {
+            sm[temp]=*p;
+            st[temp]=st[i];   /*same hunger level*/
+            if (!born) {
+              sm[i]=128;
+              st[i]=0;                          /*necessary?*/
+            } else nsharks++;
+            break;
+          }
+        }
+      }
+    }
+  }
+  sdisplay();
+  for (p=w,i=0 ; i<COL ; i++,p++) {
+    if (*p>127) {                /*fish top*/
+      randord();
+      born=0;
+      if (--*p==128) born=*p=fbreed+128;
+      for (dir=0 ; dir<4 ; dir++) {
+        if ((temp=i+order[dir]) < 0) temp+=N;
+        if (!w[temp] && fm[temp] < 2) {
+          fm[temp]=*p;
+          if (born) nfish++;
+          else fm[i]=1;
+          break;
+        }
+      }
+    }
+  }
+  for ( ; i< (N-COL) ; i++,p++) {
+    if (*p>127) {                /*fish middle*/
+      randord();
+      born=0;
+      if (--*p==128) born=*p=fbreed+128;
+      for (dir=0 ; dir<4 ; dir++) {
+        if (!w[temp=i+order[dir]] && fm[temp] < 2) {
+          fm[temp]=*p;
+          if (born) nfish++;
+          else fm[i]=1;
+          break;
+        }
+      }
+    }
+  }
+  for ( ; i<N ; i++,p++) {
+    if (*p>127) {                /*fish*/
+      randord();
+      born=0;
+      if (--*p==128) born=*p=fbreed+128;
+      for (dir=0 ; dir<4 ; dir++) {
+        if ((temp=i+order[dir]) >= N) temp-=N;
+        if (!w[temp] && fm[temp] < 2) {
+          fm[temp]=*p;
+          if (born) nfish++;
+          else fm[i]=1;
+          break;
+        }
+      }
+    }
+  }
+  fdisplay();
+}
+
+randord() {
+  int r,t;
+  t=order[r= qrand() & 3];
+  order[r]=order[0];
+  order[0]=t;
+}
+
+main(argc,argv)
+char **argv; {
+  int i,n;
+  fbreed=10;
+  sbreed=10;
+  starve=5;
+  nfish=N/4;
+  nsharks=N/8;
+  if (argc<2) {
+    puts("Fish and shark program by Calvin Hsia\n");
+    puts("As per A.K. Dewdney article, December 1984 Scientific American\n");
+    puts("usage: fish [options] where options are\n");
+    puts("F480 for 480 initial fish\n");
+    puts("S240 for 240 initial sharks\n");
+    puts("f3   for 3  ticks until a little fish is born\n");
+    puts("s10  for 10 ticks until a little shark is born\n");
+    puts("h5   Sharks starve after 5 ticks\n");
+    puts("Type a character to start\n");
+    ci();
+  } else {
+    for (i=1 ; i<argc ; i++) {
+      n=atoi(argv[i]+1);
+      switch(*argv[i]) {
+        case 'F':
+          nfish=n;
+          break;
+        case 'S':
+          nsharks=n;
+          break;
+        case 'f':
+          if (!(fbreed=n)) fbreed=1;
+          break;
+        case 's':
+          if (!(sbreed=n)) sbreed=1;
+          break;
+        case 'h':
+          if (!(starve=n)) starve=1;
+          break;
+      }
+    }
+  }
+  setmonitor();
+  order[0]=   1;
+  order[1]=  -1;
+  order[2]= COL;
+  order[3]=-COL;
+  scr_cursoff();
+  scr_clr();
+  fillrand();
+  while (!csts()) {
+    movethem();
+  }
+  scr_rowcol(24,0);
+  scr_curson();
+}
+
+fdisplay() {
+  int i;
+  char *p=fm;
+  for (i=0 ; i<N ; p++,i++) {
+    if (*p) {
+      if (*p>127) {
+        scrxy(i,CFISH);
+        w[i]=*p;
+      } else {
+        scrxy(i,' ');
+        w[i]=0;
+      }
+      *p=0;
+    }
+  }
+  if (nfish<minf) minf=nfish;
+  if (nfish>maxf) maxf=nfish;
+  if (nsharks<mins) mins=nsharks;
+  if (nsharks>maxs) maxs=nsharks;
+  scr_rowcol(24,10);
+  printf("Tick# %4d  Sharks=%4d (%4d,%4d)  Fish=%4d (%4d,%4d)",
+    ++tick,nsharks,mins,maxs,nfish,minf,maxf);
+}
+
+sdisplay() {
+  int i;
+  char *q=sm;
+  for (i=0 ; i<N ; q++,i++) {
+    if (*q) {
+      if (*q<128) {
+        scrxy(i,CSHARK);
+        w[i]=*q;
+      } else {
+        scrxy(i,' ');
+        w[i]=0;
+      }
+      *q=0;
+    }
+  }
+}
+
+fillrand() {
+  int i,j;
+  for (i=0 ; i<nfish ; i++) {
+    while (w[j=rand()%N]) ;
+    w[j]=129+rand()%fbreed;
+    scrxy(j,CFISH);
+  }
+  for (i=0 ; i<nsharks ; i++) {
+    while (w[j=rand()%N]) ;
+    w[j]=1+rand()%sbreed;
+    st[j]=1+rand()%starve;
+    scrxy(j,CSHARK);
+  }
+}
+
+qrand() {
+#asm
+  mov ax,40h
+  mov es,ax
+  mov ax,es:[6ch]
+#
+}
+
+scrxy(n,c) {
+#asm
+  mov ax,dispseg_
+  mov es,ax
+  mov di,[bp+4]
+  sal di,1
+  mov dx,vidport_
+  mov al,1
+  out dx,al
+  mov ax,[bp+6]
+  mov ah,attr_
+  mov es:[di],ax
+  mov al,9
+  out dx,al
+#
+}
+
+setmonitor() {
+#asm
+  int 11h
+  and ax,30h
+  cmp ax,30h
+  jne iscolor
+  sub dispseg_,0800H
+  sub vidport_,020h
+  mov attr_,7h
+iscolor:
+#
+}
