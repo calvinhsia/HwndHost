@@ -25,6 +25,8 @@ namespace Reflect
         public ReflectWindow()
         {
             InitializeComponent();
+            this.Top = 0;
+            this.Left = 0;
             this.Title = "Reflect";
             this.Loaded += Reflect_Loaded;
             this.Closing += (o, e) =>
@@ -75,12 +77,13 @@ namespace Reflect
         IntPtr _clrLines = NativeMethods.CreatePen(nPenStyle: 0, nWidth: 0, nColor: (IntPtr)0xff00);
         IntPtr _clrFill = NativeMethods.CreatePen(nPenStyle: 0, nWidth: 0, nColor: (IntPtr)0xff);
         CancellationTokenSource _cts;
-
+        int _maxBounces = 5;
+        const int SpeedMult = 10;
         Point _ptLight;
-        double _angleLight;
-        double _lightSpeed = 1;
-        double _distLineThresh = 1;
+        Vector _vecLight;
+        //double _distLineThresh = 1;
         const double _piOver180 = Math.PI / 180;
+        Task _tskDrawing;
 
         List<CLine> _lstLines = new List<CLine>();
         NativeMethods.WinPoint ptPrev = new NativeMethods.WinPoint();
@@ -95,104 +98,126 @@ namespace Reflect
         void DoDrawing()
         {
             var hdc = NativeMethods.GetDC(_hwnd);
-            NativeMethods.SelectObject(hdc, _clrLines);
-            while (!_cts.IsCancellationRequested)
+            int nBounces = 0;
+            while (!_cts.IsCancellationRequested 
+                //&& nBounces++ < _maxBounces
+                )
             {
                 Thread.Sleep(10);
                 lock (_lstLines)
                 {
                     if (_fReDraw)
                     {
+                        NativeMethods.SelectObject(hdc, _clrLines);
                         foreach (var line in _lstLines)
                         {
                             NativeMethods.MoveToEx(hdc, (int)(xScale * line.pt0.X), (int)(yScale * line.pt0.Y), ref ptPrev);
                             NativeMethods.LineTo(hdc, (int)(xScale * line.pt1.X), (int)(yScale * line.pt1.Y));
                         }
                         _fReDraw = false;
+                        NativeMethods.SelectObject(hdc, _clrFill);
                     }
-                    // move the point, find the nearest line, see if it's within a Delta
-                    var ptOrigLight = _ptLight;
-                    var delX = Math.Cos(_lightSpeed * _angleLight * _piOver180);
-                    var delY = Math.Sin(_lightSpeed * _angleLight * _piOver180);
-                    _ptLight.X += delX;
-                    _ptLight.Y += delY;
+                    // for each line determine the intersection of our light vector incident line, which is just a segment
+                    // if it's behind, ignore it
+                    var lnIncidentTest = new CLine(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
 
-                    // calculate the closest line within a threshold
-                    // make sure that the next move won't get closer
-                    CLine closestLine = null;
+                    CLine lnMirror = null;
                     double minDist = double.MaxValue;
+                    Point? ptTarget = null;
                     foreach (var line in _lstLines)
                     {
-                        var dist = line.CalculateDistanceFromPoint(_ptLight);
-                        if (dist < minDist)
+                        var ptIntersect = lnIncidentTest.IntersectingPoint(line);
+                        if (ptIntersect.HasValue)
                         {
-                            minDist = dist;
-                            closestLine = line;
-                        }
-                    }
-                    if (minDist > _distLineThresh) // too far away
-                    {
-                        closestLine = null;
-                    }
-                    else
-                    {
-                        // we got the closest line. Let's see if the next move won't be closer
-                        var nextDist = closestLine.CalculateDistanceFromPoint(new Point(_ptLight.X + delX, _ptLight.Y + delY));
-                        if (nextDist < minDist)
-                        {// next move will be closer, so we won't reflect til next move
-                            closestLine = null;
-                        }
-                    }
+                            var ss = Math.Sign(_vecLight.X);
+                            var s2 = Math.Sign(ptIntersect.Value.X - _ptLight.X);
+                            if (ss * s2 == 1) // in our direction?
+                            {
+                                var dist = _ptLight.DistanceFromPoint(ptIntersect.Value);
 
-                    if (closestLine != null)
-                    {
-                        var curline = new CLine(ptOrigLight, _ptLight);
-                        if (closestLine.deltaX == 0) // vertical line
-                        {
-                            delX = -delX;
-                            var newangle =Math.Tan( delY / delX)/_piOver180;
-
-                        }
-                        else if (closestLine.deltaY == 0) // horiz line
-                        {
-                            delY = -delY;
-                            var newangle = Math.Tan(delY / delX) / _piOver180;
-
+                                if (dist > .001 && dist < minDist)
+                                {
+                                    minDist = dist;
+                                    lnMirror = line;
+                                    ptTarget = ptIntersect.Value;
+                                }
+                            }
                         }
                         else
                         {
-                            var angBetween = closestLine.angleBetween(curline);
-                            var newSlope = Math.Tan(Math.Atan(closestLine.slope) + angBetween * _piOver180) / _piOver180;
-
+                            //                            Debug.Assert(false, "parallel");
                         }
                     }
-                    else
+                    //                    Debug.Assert(closestLine != null, "no closest line");
+                    if (lnMirror != null)
                     {
-                        NativeMethods.SetPixel(hdc, (int)(xScale * _ptLight.X), (int)(yScale * _ptLight.Y), _clrFill);
+                        // now draw incident line from orig pt to intersection
+                        NativeMethods.MoveToEx(hdc, (int)(xScale * _ptLight.X), (int)(yScale * _ptLight.Y), ref ptPrev);
+                        NativeMethods.LineTo(hdc, (int)(xScale * ptTarget.Value.X), (int)(yScale * ptTarget.Value.Y));
+                        // now reflect vector
+                        if (lnMirror.deltaX == 0) // vertical line
+                        {
+                            _vecLight.X = -_vecLight.X;
+                        }
+                        else if (lnMirror.deltaY == 0) // horiz line
+                        {
+                            _vecLight.Y = -_vecLight.Y;
+                        }
+                        else
+                        {
+                            //// create incident line endpoint to intersection with correct seg length
+                            var lnIncident = new CLine(_ptLight, ptTarget.Value);
+                            var angBetween = lnIncidentTest.angleBetween(lnMirror);
+                            var angClosest = Math.Atan(lnMirror.slope) / _piOver180;
+                            var angIncident = Math.Atan(lnIncidentTest.slope) / _piOver180;
+                            var angReflect = 2 * angClosest - angIncident;
+                            //                            var newSlope = Math.Tan(Math.Atan2(closestLine.deltaY, closestLine.deltaX) + angBetween * _piOver180) / _piOver180;
+                            //newSlope = -Math.Tan(Math.PI - Math.Atan2(lnIncidentTest.deltaY, lnIncidentTest.deltaX) + 2 * Math.Atan2(closestLine.deltaY, closestLine.deltaX));
+                            //newSlope = -Math.Tan(-Math.Atan2(lnIncidentTest.deltaY, lnIncidentTest.deltaX) + 2 * Math.Atan2(closestLine.deltaY, closestLine.deltaX));
+                            var newSlope = Math.Tan(-Math.Atan(lnIncidentTest.slope) + 2 * Math.Atan(lnMirror.slope));
+                            // now we have the slope of the desired reflection line: 
+                            // now we need to determine the reflection direction (x & y) along the slope
+                            // The incidnet line came from one side of the mirror. We need to leave on the same side.
+                            // to do so, we assume we're going in a particular direction
+                            // then we create a test point using the new slope
+                            // we see where a line from the incident line segment to the test point intersects the mirror.
+                            // if the intersection is within the incident line segment then we've gone through the mirror
+                            // if the intersection is beyond the line segment then we're on the same side of the mirror
+
+                            // first set the new speed in a guessed direction. If it's wrong we negate it.
+                            _vecLight.X = SpeedMult;
+                            _vecLight.Y = SpeedMult * newSlope;
+                            // create a test point along the line of reflection
+                            var ptTest = new Point(ptTarget.Value.X + _vecLight.X, ptTarget.Value.Y + _vecLight.Y);
+                            var lnIncidentToTestPt = new CLine(_ptLight, ptTest);
+                            var ptTestIntsectMirror = lnIncidentToTestPt.IntersectingPoint(lnMirror);
+                            if (ptTestIntsectMirror.HasValue && ptTestIntsectMirror.Value.DistanceFromPoint(_ptLight)<lnIncidentToTestPt.LineLength)
+                            {
+                                _vecLight.X = -SpeedMult;
+                                _vecLight.Y = -_vecLight.Y;
+                            }
+                        }
+                        // now set new pt 
+                        _ptLight = ptTarget.Value;
                     }
                 }
-
-                //for (int i = 0; i < 1000; i++)
-                //{
-                //    for (int j = 0; j < 1000; j++)
-                //    {
-                //        //var curpixel=NativeMethods.GetPixel(hdc, i, j);
-                //        //if (curpixel != _colorDraw)
-                //        {
-                //            NativeMethods.SetPixel(hdc, i, j, _colorDraw);
-                //        }
-                //    }
-                //}
             }
             NativeMethods.ReleaseDC(_hwnd, hdc);
-
         }
+
         public override void OnReady(IntPtr hwnd)
         {
-            var tsk = Task.Run(() =>
+            while (_tskDrawing != null && !(_tskDrawing.IsCanceled || _tskDrawing.IsCompleted))
+            {
+                _cts.Cancel();
+                Thread.Sleep(10);
+            }
+            _cts = new CancellationTokenSource();
+            _tskDrawing = Task.Run(() =>
             {
                 DoDrawing();
             });
+
         }
 
         void AddLine(CLine line)
@@ -214,15 +239,16 @@ namespace Reflect
             _fPenDown = false;
             _fPenModeDrag = false;
             _ptLight = new Point(mrg * 2, mrg * 2);
-            _angleLight = 4;
+            _vecLight = new Vector(10, 1);
             lock (this._lstLines)
             {
                 this._lstLines.Clear();
                 this._lstLines.Add(new CLine(ptTopLeft, ptTopRight));
                 this._lstLines.Add(new CLine(ptTopRight, ptBotRight));
+                this._lstLines.Add(new CLine(new Point(sizeInfo.NewSize.Width - 10, 0), new Point(sizeInfo.NewSize.Width - 9, 400)));
                 this._lstLines.Add(new CLine(ptBotRight, ptBotLeft));
                 this._lstLines.Add(new CLine(ptTopLeft, ptBotLeft));
-               //  this._lstLines.Add(new CLine(ptBotLeft, ptTopRight));
+                this._lstLines.Add(new CLine(ptBotLeft, ptTopRight));
                 var l1 = new CLine(new Point(0, 0), new Point(sizeInfo.NewSize.Height - 1, sizeInfo.NewSize.Width - 1));
                 this._lstLines.Add(l1);
             }
@@ -305,12 +331,14 @@ namespace Reflect
             public Point pt0 { get; private set; }
             public Point pt1 { get; private set; }
             Lazy<double> lazyLineSegLength;
+            public double LineLength => lazyLineSegLength.Value;
+
             public CLine(Point p0, Point p1)
             {
                 this.pt0 = p0;
                 this.pt1 = p1;
                 lazyLineSegLength = new Lazy<double>(() =>
-                    Math.Sqrt(square(pt1.Y - pt0.Y) + square(pt1.X - pt0.X)),
+                    Math.Sqrt((pt1.Y - pt0.Y).squared() + (pt1.X - pt0.X).squared()),
                    isThreadSafe: false // only accessed from one thread
                 );
             }
@@ -348,16 +376,34 @@ namespace Reflect
             public Point? IntersectingPoint(CLine otherLine)
             {
                 Point? result = null;
-
+                var x1 = this.pt0.X;
+                var y1 = this.pt0.Y;
+                var x2 = this.pt1.X;
+                var y2 = this.pt1.Y;
+                var x3 = otherLine.pt0.X;
+                var y3 = otherLine.pt0.Y;
+                var x4 = otherLine.pt1.X;
+                var y4 = otherLine.pt1.Y;
+                var denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+                if (denom != 0)
+                {
+                    var x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom;
+                    var y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom;
+                    result = new Point(x, y);
+                }
                 return result;
             }
+
+            public double DistanceToPoint(Point pt)
+            {
+                double dist = Math.Abs((pt1.Y-pt0.Y)*pt.X - (pt1.X-pt0.X)*pt.Y  +pt1.X*pt0.Y-pt1.Y*pt0.X) / 
+                    Math.Sqrt((pt1.Y-pt0.Y).squared() + (pt1.X-pt0.X).squared());
+                return dist;
+            }
+
             public override string ToString()
             {
                 return $"({pt0}),({pt1})";
-            }
-            double square(double x)
-            {
-                return x * x;
             }
             internal double CalculateDistanceFromPoint(Point ptLight)
             {
@@ -366,5 +412,24 @@ namespace Reflect
             }
 
         }
+    }
+    static class ExtensionMethods
+    {
+        public static double squared(this double d1)
+        {
+            return d1 * d1;
+        }
+        public static double DistanceFromPoint(this Point pt, Point otherPoint)
+        {
+            var xd = pt.X - otherPoint.X;
+            var yd = pt.Y - otherPoint.Y;
+            return Math.Sqrt(xd * xd + yd * yd);
+        }
+        public static Point Add(this Point pt, Point other)
+        {
+            Point res = new Point(pt.X + other.X, pt.Y + other.Y);
+            return res;
+        }
+
     }
 }
