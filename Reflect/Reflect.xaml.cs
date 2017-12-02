@@ -103,7 +103,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         Margin=""10,2,0,0"" 
         VerticalAlignment=""Top"" 
         Width=""55""/>
-
 </DockPanel>
 </Grid>
 ";
