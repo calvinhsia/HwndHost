@@ -1,0 +1,9 @@
+﻿<Application x:Class="Reflect.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Reflect"
+             StartupUri="Reflect.xaml">
+    <Application.Resources>
+         
+    </Application.Resources>
+</Application>
