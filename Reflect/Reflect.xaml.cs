@@ -171,7 +171,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 //&& nBounces++ < _maxBounces
                 )
             {
-//                Thread.Sleep(10);
+                Thread.Sleep(10);
                 lock (_lstLines)
                 {
                     if (_fReDraw)
