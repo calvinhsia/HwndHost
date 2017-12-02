@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -39,6 +40,74 @@ namespace Reflect
         {
             try
             {
+                // Make a namespace referring to our namespace and assembly
+                // using the prefix "l:"
+                //xmlns:l=""clr-namespace:Fish;assembly=Fish"""
+                var nameSpace = this.GetType().Namespace;
+                var asm = System.IO.Path.GetFileNameWithoutExtension(
+                    Assembly.GetExecutingAssembly().Location);
+
+                var xmlns = string.Format(
+  @"xmlns:l=""clr-namespace:{0};assembly={1}""", nameSpace, asm);
+                //there are a lot of quotes (and braces) in XAML
+                //and the C# string requires quotes to be doubled
+                var strxaml =
+  @"<Grid
+xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
+" + xmlns + // add our xaml namespace
+  @" Margin=""5,5,5,5"">
+<Grid.RowDefinitions>
+    <RowDefinition/>
+    <RowDefinition Height=""25"" />
+</Grid.RowDefinitions>
+<DockPanel Grid.Row=""0"">
+    <Grid>
+        <Grid.ColumnDefinitions>
+        <ColumnDefinition Width = ""70""/>
+        <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+        <StackPanel Name=""inputPanel"" 
+            Orientation=""Vertical"" 
+            >
+            <CheckBox Content=""_Running"" 
+                IsChecked= ""{Binding Path=IsRunning}"" />
+
+        </StackPanel>
+        <UserControl Name=""MyUserControl"" Grid.Column=""1""></UserControl>
+    </Grid>
+</DockPanel>
+<DockPanel Grid.Row=""1"">
+    <TextBox 
+        Name=""tbxStatus"" 
+        HorizontalAlignment=""Left"" 
+        Height=""23"" 
+        Margin=""10,2,0,0"" 
+        IsReadOnly=""True""
+        TextWrapping=""Wrap"" 
+        VerticalAlignment=""Top"" 
+        Width=""420""/>
+    <Slider 
+        HorizontalAlignment=""Left"" 
+        Minimum=""0""
+        Maximum=""1000""
+        Margin=""12,2,0,0"" 
+        Value=""{Binding Path=_nDelay}""
+        VerticalAlignment=""Top"" 
+        ToolTip=""Change the delay""
+        Width=""100""/>
+    <Button 
+        Name=""btnQuit"" 
+        Content=""_Quit"" 
+        HorizontalAlignment=""Left"" 
+        Margin=""10,2,0,0"" 
+        VerticalAlignment=""Top"" 
+        Width=""55""/>
+
+</DockPanel>
+</Grid>
+";
+
                 var dp = new DockPanel();
                 this.Content = dp;
                 var border = new Border();
@@ -99,11 +168,11 @@ namespace Reflect
         {
             var hdc = NativeMethods.GetDC(_hwnd);
             int nBounces = 0;
-            while (!_cts.IsCancellationRequested 
+            while (!_cts.IsCancellationRequested
                 //&& nBounces++ < _maxBounces
                 )
             {
-                Thread.Sleep(10);
+//                Thread.Sleep(10);
                 lock (_lstLines)
                 {
                     if (_fReDraw)
@@ -189,13 +258,28 @@ namespace Reflect
                             _vecLight.Y = SpeedMult * newSlope;
                             // create a test point along the line of reflection
                             var ptTest = new Point(ptTarget.Value.X + _vecLight.X, ptTarget.Value.Y + _vecLight.Y);
-                            var lnIncidentToTestPt = new CLine(_ptLight, ptTest);
-                            var ptTestIntsectMirror = lnIncidentToTestPt.IntersectingPoint(lnMirror);
-                            if (ptTestIntsectMirror.HasValue && ptTestIntsectMirror.Value.DistanceFromPoint(_ptLight)<lnIncidentToTestPt.LineLength)
+                            var xx = lnMirror.LeftHalf(_ptLight);
+                            var yy = lnMirror.LeftHalf(ptTest);
+                            if (xx ^ yy)
                             {
                                 _vecLight.X = -SpeedMult;
                                 _vecLight.Y = -_vecLight.Y;
                             }
+                            //var yintercep = lnIncident.YIntercept();
+                            //var lnIncidentToTestPt = new CLine(_ptLight, ptTest);
+                            //var ptTestIntsectMirror = lnIncidentToTestPt.IntersectingPoint(lnMirror);
+                            //var dist2Test = ptTestIntsectMirror.Value.DistanceFromPoint(_ptLight);
+                            //var lenlnIncident = lnIncidentToTestPt.LineLength;
+                            //var delt = Math.Abs(dist2Test - lenlnIncident);
+                            //if (delt < .01)
+                            //{
+                            //    var x = "no value";
+                            //}
+                            //if (ptTestIntsectMirror.HasValue && dist2Test < lenlnIncident)
+                            //{
+                            //    _vecLight.X = -SpeedMult;
+                            //    _vecLight.Y = -_vecLight.Y;
+                            //}
                         }
                         // now set new pt 
                         _ptLight = ptTarget.Value;
@@ -396,9 +480,27 @@ namespace Reflect
 
             public double DistanceToPoint(Point pt)
             {
-                double dist = Math.Abs((pt1.Y-pt0.Y)*pt.X - (pt1.X-pt0.X)*pt.Y  +pt1.X*pt0.Y-pt1.Y*pt0.X) / 
-                    Math.Sqrt((pt1.Y-pt0.Y).squared() + (pt1.X-pt0.X).squared());
+                double dist = Math.Abs((pt1.Y - pt0.Y) * pt.X - (pt1.X - pt0.X) * pt.Y + pt1.X * pt0.Y - pt1.Y * pt0.X) /
+                    Math.Sqrt((pt1.Y - pt0.Y).squared() + (pt1.X - pt0.X).squared());
                 return dist;
+            }
+            public double YIntercept()
+            {
+                var yint1 = pt0.Y - this.slope * pt0.X;
+                return yint1;
+            }
+
+            /// <summary>
+            /// given a point ptTest, see if it's on the "left" or Not of the plane
+            /// </summary>
+            /// <param name="ptTest"></param>
+            /// <returns></returns>
+            public bool LeftHalf(Point c)
+            {
+                var a = pt0;
+                var b = pt1;
+                var res = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+                return res > 0;
             }
 
             public override string ToString()
