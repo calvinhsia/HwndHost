@@ -321,22 +321,22 @@ Public MustInherit Class MyHwndHost
                                       lParam As IntPtr,
                                       ByRef handled As Boolean
                                       ) As IntPtr
-    'Debug.WriteLine(String.Format("{0:x8} {1:x8} {2:x8} {3:x8}",
-    '                              hwnd, msg, wParam, lParam))
-    Select Case msg
-      Case WM_.WM_ERASEBKGND
-        EraseRect()
-        ValidateRect(_hwnd, Nothing)
-        OnReady(_hwnd)
-        handled = True
-        Return IntPtr.Zero
-      Case WM_.WM_PAINT
-        ValidateRect(_hwnd, Nothing)
-        handled = True
-        Return IntPtr.Zero
-    End Select
-    Return MyBase.WndProc(hwnd, msg, wParam, lParam, handled)
-  End Function
+        'Debug.WriteLine(String.Format("{0:x8} {1:x8} {2:x8} {3:x8}",
+        '                              hwnd, msg, wParam, lParam))
+        Select Case msg
+            Case WM_.WM_ERASEBKGND
+                EraseRect()
+                ValidateRect(_hwnd, Nothing)
+                OnReady(_hwnd)
+                handled = True
+                Return IntPtr.Zero
+            Case WM_.WM_PAINT
+                ValidateRect(_hwnd, Nothing)
+                handled = True
+                Return IntPtr.Zero
+        End Select
+        Return MyBase.WndProc(hwnd, msg, wParam, lParam, handled)
+    End Function
 
   Protected Overrides Sub DestroyWindowCore(hwnd As HandleRef)
     DeleteObject(_hbrBackground)
