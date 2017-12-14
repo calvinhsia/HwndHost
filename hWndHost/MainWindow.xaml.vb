@@ -331,7 +331,9 @@ Public MustInherit Class MyHwndHost
                 handled = True
                 Return IntPtr.Zero
             Case WM_.WM_PAINT
-                ValidateRect(_hwnd, Nothing)
+                Dim ps As PAINTSTRUCT = Nothing
+                Dim hdc = BeginPaint(_hwnd, ps)
+                EndPaint(_hwnd, ps)
                 handled = True
                 Return IntPtr.Zero
         End Select
