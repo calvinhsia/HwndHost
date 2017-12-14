@@ -879,7 +879,7 @@ Per A.K. Dewdney article on Wator, December 1984 Scientific American
     static IntPtr _penBlank = IntPtr.Zero;
     public void Draw()
     {
-      //*
+      /*
       var ypos = FishBowl._Instance.CellHeight * 2;
       var xpos = 0;
       if (_animal != null)

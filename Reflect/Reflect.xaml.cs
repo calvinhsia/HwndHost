@@ -1,9 +1,11 @@
 ﻿using hWndHost;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,28 +14,28 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using System.Xml;
 
 namespace Reflect
 {
     public partial class ReflectWindow : Window
     {
-        CancellationTokenSource _cts = new CancellationTokenSource();
+        static TextBox _tbxStatus;
+
         public ReflectWindow()
         {
             InitializeComponent();
             this.Top = 0;
             this.Left = 0;
             this.Title = "Reflect";
+            this.WindowState = WindowState.Maximized;
             this.Loaded += Reflect_Loaded;
-            this.Closing += (o, e) =>
-            {
-                _cts.Cancel();
-            };
         }
 
         private void Reflect_Loaded(object sender, RoutedEventArgs e)
@@ -72,6 +74,51 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             >
             <CheckBox Content=""_Running"" 
                 IsChecked= ""{Binding Path=IsRunning}"" />
+            <CheckBox Content=""ChangeColor"" 
+                IsChecked= ""{Binding Path=ChangeColor}"" />
+            <Button 
+                Name=""btnClear"" 
+                Content=""_Clear"" 
+                ToolTip=""Clear all, but keep the user drawn mirrors""
+                Margin=""10,2,0,0"" 
+                />
+            <Button 
+                Name=""btnClearMirrors"" 
+                Content=""Clear_Mirrors"" 
+                ToolTip=""Clear the user drawn mirrors (Ctrl-Z will undo one at a time)""
+                Margin=""10,2,0,0"" 
+                />
+            <Label Content=""Delay""/>
+            <StackPanel Orientation=""Horizontal"">
+                <l:MyTextBox 
+                    Text =""{Binding Path=nDelay}"" 
+                    Name=""txtDelay""
+                    Width=""50""
+                    ToolTip=""Delay between line drawing in msecs. Changes by 10%"" />
+                <StackPanel Orientation=""Vertical"">
+                    <Button
+                        Name=""DelayUp""
+                        Content=""á""
+                        FontFamily=""WingDings""
+                        FontSize=""8""
+                        Width=""16""
+                        Height=""10""
+                        />
+                    <Button
+                        Name=""DelayDn""
+                        Content=""â""
+                        FontFamily=""WingDings""
+                        FontSize=""8""
+                        Width=""16""
+                        Height=""10""
+                        />
+                </StackPanel>
+            </StackPanel>
+                <Label Content=""PenWidth""/>
+                <l:MyTextBox 
+                    Text =""{Binding Path=nPenWidth}"" 
+                    Width=""50""
+                    ToolTip=""Width of reflection pen"" />
 
         </StackPanel>
         <UserControl Name=""MyUserControl"" Grid.Column=""1""></UserControl>
@@ -85,17 +132,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         Margin=""10,2,0,0"" 
         IsReadOnly=""True""
         TextWrapping=""Wrap"" 
+        FontFamily=""Courier New""
+        FontSize = ""10""
         VerticalAlignment=""Top"" 
-        Width=""420""/>
-    <Slider 
-        HorizontalAlignment=""Left"" 
-        Minimum=""0""
-        Maximum=""1000""
-        Margin=""12,2,0,0"" 
-        Value=""{Binding Path=_nDelay}""
-        VerticalAlignment=""Top"" 
-        ToolTip=""Change the delay""
-        Width=""100""/>
+        Width=""820""/>
     <Button 
         Name=""btnQuit"" 
         Content=""_Quit"" 
@@ -107,107 +147,211 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 </Grid>
 ";
 
-                var dp = new DockPanel();
-                this.Content = dp;
-                var border = new Border();
-                dp.Children.Add(border);
-                var spControls = new StackPanel()
-                {
-                    Orientation = Orientation.Horizontal
-                };
-                var btnQuit = new Button()
-                {
-                    Content = "Quit"
-                };
+                var strReader = new System.IO.StringReader(strxaml);
+                var xamlreader = XmlReader.Create(strReader);
+                var grid = (Grid)(XamlReader.Load(xamlreader));
+                this.Content = grid;
+                _tbxStatus = (TextBox)grid.FindName("tbxStatus");
+                var btnQuit = (Button)grid.FindName("btnQuit");
                 btnQuit.Click += (ob, eb) =>
                 {
-                    this.Close();
+                    App.Current.Shutdown();
                 };
-                spControls.Children.Add(btnQuit);
-                dp.Children.Add(spControls);
                 var bounceFrame = new BounceFrame(
-                    _cts,
                     NativeMethods.CreateSolidBrush(new IntPtr(0xfff0f0)));
-                dp.Children.Add(bounceFrame);
-                // forward mouse events to the hWndHost control
+                grid.DataContext = bounceFrame;
+                var btnClear = (Button)grid.FindName("btnClear");
+                btnClear.Click += (ob, eb) =>
+                {
+                    bounceFrame.Clear(fKeepUserMirrors: true);
+                };
+                var btnClearMirrors = (Button)grid.FindName("btnClearMirrors");
+                btnClearMirrors.Click += (ob, eb) =>
+                {
+                    bounceFrame.Clear(fKeepUserMirrors: false);
+                };
+                var btnDelayUp = (Button)grid.FindName("DelayUp");
+                Func<int> CalcDelayInc = () =>
+                  {
+                      var inc = 1;
+                      if (bounceFrame.nDelay > 0)
+                      {
+                          //inc = (int)Math.Pow(10, (int)Math.Log10(bounceFrame.nDelay) - 1); // logarithmic
+                          inc = (int)(.25 * bounceFrame.nDelay); // %
+                          if (inc == 0)
+                          {
+                              inc = 1;
+                          }
+                      }
+                      return inc;
+                  };
+                btnDelayUp.Click += (ob, eb) =>
+                 {
+                     bounceFrame.nDelay += CalcDelayInc();
+                 };
+                var btnDelayDn = (Button)grid.FindName("DelayDn");
+                btnDelayDn.Click += (ob, eb) =>
+                {
+                    bounceFrame.nDelay -= CalcDelayInc();
+                    if (bounceFrame.nDelay < 0)
+                    {
+                        bounceFrame.nDelay = 0;
+                    }
+                };
+                var userCtrl = (UserControl)grid.FindName("MyUserControl");
+                userCtrl.Content = bounceFrame;
+                this.Closing += (oc, ec) =>
+                {
+                    bounceFrame.IsRunning = false;
+                };
+                //// forward mouse events to the hWndHost control
                 this.MouseDown += (om, em) => bounceFrame.DoMouseDown(om, em);
                 this.MouseMove += (om, em) => bounceFrame.DoMouseMove(om, em);
                 this.MouseUp += (om, em) => bounceFrame.DoMouseUp(om, em);
+                this.KeyDown += (ok, ek) => bounceFrame.DoKeyDown(ok, ek);
             }
             catch (Exception ex)
             {
                 this.Content = ex.ToString();
             }
         }
+        protected override void OnMouseDown(MouseButtonEventArgs e)
+        {
+            base.OnMouseDown(e);
+        }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+        }
+        public static void AddStatusMessage(string msg, params object[] parms)
+        {
+            var txt = string.Format(msg, parms);
+            _tbxStatus.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _tbxStatus.Text = txt;
+            }));
+        }
     }
-    public class BounceFrame : MyHwndHost
+
+    public class BounceFrame : MyHwndHost, INotifyPropertyChanged
     {
-        IntPtr _clrLines = NativeMethods.CreatePen(nPenStyle: 0, nWidth: 0, nColor: (IntPtr)0xff00);
-        IntPtr _clrFill = NativeMethods.CreatePen(nPenStyle: 0, nWidth: 0, nColor: (IntPtr)0xff);
+        IntPtr _clrMirror = NativeMethods.CreatePen(nPenStyle: 0, nWidth: 2, nColor: (IntPtr)0x00);
+        IntPtr _clrFillReflection = NativeMethods.CreatePen(nPenStyle: 0, nWidth: 0, nColor: (IntPtr)0xff);
+        int _colorReflection;
+        Random _rand = new Random(1);
+
         CancellationTokenSource _cts;
-        int _maxBounces = 5;
-        const int SpeedMult = 10;
+        const int SpeedMult = 1000;
         Point _ptLight;
         Vector _vecLight;
         //double _distLineThresh = 1;
         const double _piOver180 = Math.PI / 180;
         Task _tskDrawing;
+        int _nDelay = 0;
+        int _nOutofBounds = 0;
+        public int nDelay { get { return _nDelay; } set { _nDelay = value; RaisePropChanged(); } }
 
-        List<CLine> _lstLines = new List<CLine>();
-        NativeMethods.WinPoint ptPrev = new NativeMethods.WinPoint();
-        bool _fReDraw = false;
+        int _nPenWidth = 1;
+        public int nPenWidth { get { return _nPenWidth; } set { _nPenWidth = value; RaisePropChanged(); } }
+        public bool ChangeColor { get; set; } = true;
+
+        bool _isRunning;
+        List<CLine> _lstMirrors = new List<CLine>();
+        NativeMethods.WinPoint _ptPrev = new NativeMethods.WinPoint();
         public BounceFrame(
-            CancellationTokenSource cts,
             IntPtr hbrBackground
             ) : base(hbrBackground)
         {
-            this._cts = cts;
+            this._cts = new CancellationTokenSource();
+            Clear(fKeepUserMirrors: false);
         }
-        void DoDrawing()
+        void DrawMirrors()
         {
             var hdc = NativeMethods.GetDC(_hwnd);
+            NativeMethods.SelectObject(hdc, _clrMirror);
+            lock (_lstMirrors)
+            {
+                foreach (var line in _lstMirrors)
+                {
+                    NativeMethods.MoveToEx(hdc, (int)(xScale * line.pt0.X), (int)(yScale * line.pt0.Y), ref _ptPrev);
+                    NativeMethods.LineTo(hdc, (int)(xScale * line.pt1.X), (int)(yScale * line.pt1.Y));
+                }
+                NativeMethods.ReleaseDC(_hwnd, hdc);
+            }
+        }
+        void ChooseRandomStartingRay()
+        {
+            _ptLight.X = _rand.Next((int)(this.ActualWidth));
+            _ptLight.Y = _rand.Next((int)(this.ActualHeight));
+            _vecLight.X = 1;
+            _vecLight.Y = _rand.NextDouble();
+        }
+        void DoReflecting()
+        {
+            var hDC = NativeMethods.GetDC(_hwnd);
             int nBounces = 0;
+            int nLastBounceWhenStagnant = 0;
+            _nOutofBounds = 0;
+            var sw = new Stopwatch();
+            sw.Start();
             while (!_cts.IsCancellationRequested
                 //&& nBounces++ < _maxBounces
                 )
             {
-                Thread.Sleep(10);
-                lock (_lstLines)
+                if (nBounces++ % 1000 == 0)
                 {
-                    if (_fReDraw)
+                    int bouncesPerSecond = 0;
+                    if (sw.ElapsedMilliseconds > 0)
                     {
-                        NativeMethods.SelectObject(hdc, _clrLines);
-                        foreach (var line in _lstLines)
-                        {
-                            NativeMethods.MoveToEx(hdc, (int)(xScale * line.pt0.X), (int)(yScale * line.pt0.Y), ref ptPrev);
-                            NativeMethods.LineTo(hdc, (int)(xScale * line.pt1.X), (int)(yScale * line.pt1.Y));
-                        }
-                        _fReDraw = false;
-                        NativeMethods.SelectObject(hdc, _clrFill);
+                        bouncesPerSecond = (int)(1000 * nBounces / sw.ElapsedMilliseconds);
                     }
-                    // for each line determine the intersection of our light vector incident line, which is just a segment
-                    // if it's behind, ignore it
-                    var lnIncidentTest = new CLine(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
+                    ReflectWindow.AddStatusMessage(
+                        $"# Lines= {_lstMirrors.Count} bounces = {nBounces:n0}" +
+                        $" ({_ptLight.X,8:n1},{_ptLight.Y,8:n1}) ({_vecLight.X,8:n4},{_vecLight.Y,8:n4})" +
+                        $" OOB={_nOutofBounds}" +
+                        $" B/S={bouncesPerSecond}");
+                }
+                if (nDelay > 0)
+                {
+                    Thread.Sleep(nDelay);
+                }
+                // for each line determine the intersection of our light vector incident line, which is just a segment
+                // if it's behind, ignore it
+                var lnIncident = new CLine(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
 
-                    CLine lnMirror = null;
-                    double minDist = double.MaxValue;
-                    Point? ptTarget = null;
-                    foreach (var line in _lstLines)
+                CLine lnMirror = null;
+                double minDist = double.MaxValue;
+                Point? ptIntersect = null; // the point of intersection of the light vector and the closest mirror
+                lock (_lstMirrors)
+                {
+                    foreach (var line in _lstMirrors)
                     {
-                        var ptIntersect = lnIncidentTest.IntersectingPoint(line);
-                        if (ptIntersect.HasValue)
+                        var ptIntersectTest = lnIncident.IntersectingPoint(line);
+                        if (ptIntersectTest.HasValue)
                         {
-                            var ss = Math.Sign(_vecLight.X);
-                            var s2 = Math.Sign(ptIntersect.Value.X - _ptLight.X);
-                            if (ss * s2 == 1) // in our direction?
+                            // the incident line intersects the mirror. Our mirrors have non-infinite width
+                            // let's see if the intersection point is within the mirror's edges
+                            if (line.pt0.DistanceFromPoint(ptIntersectTest.Value) +
+                                ptIntersectTest.Value.DistanceFromPoint(line.pt1) - line.LineLength < .00001)
+                            //if (line.pt0.X <= ptIntersect.Value.X && ptIntersect.Value.X <= line.pt1.X &&
+                            //    line.pt0.Y <= ptIntersect.Value.Y && ptIntersect.Value.Y <= line.pt1.Y
+                            //    ||
+                            //    line.pt0.X >= ptIntersect.Value.X && ptIntersect.Value.X >= line.pt1.X &&
+                            //    line.pt0.Y >= ptIntersect.Value.Y && ptIntersect.Value.Y >= line.pt1.Y
+                            //    )
                             {
-                                var dist = _ptLight.DistanceFromPoint(ptIntersect.Value);
-
-                                if (dist > .001 && dist < minDist)
+                                var ss = Math.Sign(_vecLight.X);
+                                var s2 = Math.Sign(ptIntersectTest.Value.X - _ptLight.X);
+                                if (ss * s2 == 1) // in our direction?
                                 {
-                                    minDist = dist;
-                                    lnMirror = line;
-                                    ptTarget = ptIntersect.Value;
+                                    var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
+
+                                    if (dist > .001 && dist < minDist)
+                                    {
+                                        minDist = dist;
+                                        lnMirror = line;
+                                        ptIntersect = ptIntersectTest.Value;
+                                    }
                                 }
                             }
                         }
@@ -216,137 +360,241 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             //                            Debug.Assert(false, "parallel");
                         }
                     }
-                    //                    Debug.Assert(closestLine != null, "no closest line");
-                    if (lnMirror != null)
+                }
+                //                                        Debug.Assert(lnMirror != null, "no closest mirror");
+                if (lnMirror == null)
+                {
+                    //ReflectWindow.AddStatusMessage($"No closest mirror pt = {_ptLight} vec = {_vecLight}");
+                    if (nLastBounceWhenStagnant == nBounces - 1)
+                    {// both the last bounce and this bounce were stagnant
+                        nLastBounceWhenStagnant = nBounces;
+                        _nOutofBounds++;
+                        ChooseRandomStartingRay();
+                    }
+                    else
                     {
-                        // now draw incident line from orig pt to intersection
-                        NativeMethods.MoveToEx(hdc, (int)(xScale * _ptLight.X), (int)(yScale * _ptLight.Y), ref ptPrev);
-                        NativeMethods.LineTo(hdc, (int)(xScale * ptTarget.Value.X), (int)(yScale * ptTarget.Value.Y));
-                        // now reflect vector
-                        if (lnMirror.deltaX == 0) // vertical line
-                        {
-                            _vecLight.X = -_vecLight.X;
-                        }
-                        else if (lnMirror.deltaY == 0) // horiz line
-                        {
-                            _vecLight.Y = -_vecLight.Y;
-                        }
-                        else
-                        {
-                            //// create incident line endpoint to intersection with correct seg length
-                            var lnIncident = new CLine(_ptLight, ptTarget.Value);
-                            var angBetween = lnIncidentTest.angleBetween(lnMirror);
-                            var angClosest = Math.Atan(lnMirror.slope) / _piOver180;
-                            var angIncident = Math.Atan(lnIncidentTest.slope) / _piOver180;
-                            var angReflect = 2 * angClosest - angIncident;
-                            //                            var newSlope = Math.Tan(Math.Atan2(closestLine.deltaY, closestLine.deltaX) + angBetween * _piOver180) / _piOver180;
-                            //newSlope = -Math.Tan(Math.PI - Math.Atan2(lnIncidentTest.deltaY, lnIncidentTest.deltaX) + 2 * Math.Atan2(closestLine.deltaY, closestLine.deltaX));
-                            //newSlope = -Math.Tan(-Math.Atan2(lnIncidentTest.deltaY, lnIncidentTest.deltaX) + 2 * Math.Atan2(closestLine.deltaY, closestLine.deltaX));
-                            var newSlope = Math.Tan(-Math.Atan(lnIncidentTest.slope) + 2 * Math.Atan(lnMirror.slope));
-                            // now we have the slope of the desired reflection line: 
-                            // now we need to determine the reflection direction (x & y) along the slope
-                            // The incidnet line came from one side of the mirror. We need to leave on the same side.
-                            // to do so, we assume we're going in a particular direction
-                            // then we create a test point using the new slope
-                            // we see where a line from the incident line segment to the test point intersects the mirror.
-                            // if the intersection is within the incident line segment then we've gone through the mirror
-                            // if the intersection is beyond the line segment then we're on the same side of the mirror
+                        _vecLight.X = -_vecLight.X;
+                        nLastBounceWhenStagnant = nBounces;
+                    }
+                    continue;
+                    //_cts.Cancel();
+                    //IsRunning = false;
+                    //break;
+                }
+                // now draw incident line from orig pt to intersection
+                NativeMethods.SelectObject(hDC, _clrFillReflection);
+                if (nBounces == 1)
+                {
+                    NativeMethods.MoveToEx(hDC, (int)(xScale * _ptLight.X), (int)(yScale * _ptLight.Y), ref _ptPrev);
+                }
+                NativeMethods.LineTo(hDC, (int)(xScale * ptIntersect.Value.X), (int)(yScale * ptIntersect.Value.Y));
+                // now reflect vector
+                if (lnMirror.deltaX == 0) // vertical line
+                {
+                    _vecLight.X = -_vecLight.X;
+                }
+                else if (lnMirror.deltaY == 0) // horiz line
+                {
+                    _vecLight.Y = -_vecLight.Y;
+                }
+                else
+                {
+                    //// create incident line endpoint to intersection with correct seg length
+                    //var lnIncident = new CLine(_ptLight, ptTarget.Value);
+                    //var angBetween = lnIncidentTest.angleBetween(lnMirror);
+                    //var angClosest = Math.Atan(lnMirror.slope) / _piOver180;
+                    //var angIncident = Math.Atan(lnIncidentTest.slope) / _piOver180;
+                    //var angReflect = 2 * angClosest - angIncident;
+                    var newSlope = Math.Tan(2 * Math.Atan(lnMirror.slope) - Math.Atan(lnIncident.slope));
+                    // now we have the slope of the desired reflection line: 
+                    // now we need to determine the reflection direction (x & y) along the slope
+                    // The incident line came from one side (half plane) of the mirror. We need to leave on the same side.
+                    // to do so, we assume we're going in a particular direction
+                    // then we create a test point using the new slope
+                    // we see which half plane the test point is in relation to the mirror.
+                    // and which half plane the light source is. If they're different, we reverse the vector
 
-                            // first set the new speed in a guessed direction. If it's wrong we negate it.
-                            _vecLight.X = SpeedMult;
-                            _vecLight.Y = SpeedMult * newSlope;
-                            // create a test point along the line of reflection
-                            var ptTest = new Point(ptTarget.Value.X + _vecLight.X, ptTarget.Value.Y + _vecLight.Y);
-                            var xx = lnMirror.LeftHalf(_ptLight);
-                            var yy = lnMirror.LeftHalf(ptTest);
-                            if (xx ^ yy)
-                            {
-                                _vecLight.X = -SpeedMult;
-                                _vecLight.Y = -_vecLight.Y;
-                            }
-                            //var yintercep = lnIncident.YIntercept();
-                            //var lnIncidentToTestPt = new CLine(_ptLight, ptTest);
-                            //var ptTestIntsectMirror = lnIncidentToTestPt.IntersectingPoint(lnMirror);
-                            //var dist2Test = ptTestIntsectMirror.Value.DistanceFromPoint(_ptLight);
-                            //var lenlnIncident = lnIncidentToTestPt.LineLength;
-                            //var delt = Math.Abs(dist2Test - lenlnIncident);
-                            //if (delt < .01)
-                            //{
-                            //    var x = "no value";
-                            //}
-                            //if (ptTestIntsectMirror.HasValue && dist2Test < lenlnIncident)
-                            //{
-                            //    _vecLight.X = -SpeedMult;
-                            //    _vecLight.Y = -_vecLight.Y;
-                            //}
-                        }
-                        // now set new pt 
-                        _ptLight = ptTarget.Value;
+                    // first set the new vector to the new slope in a guessed direction. 
+                    _vecLight.X = SpeedMult;
+                    _vecLight.Y = SpeedMult * newSlope;
+                    // create a test point along the line of reflection
+                    var ptTest = new Point(ptIntersect.Value.X + _vecLight.X, ptIntersect.Value.Y + _vecLight.Y);
+                    var halfplaneLight = lnMirror.LeftHalf(_ptLight);
+                    var halfplaneTestPoint = lnMirror.LeftHalf(ptTest);
+                    if (halfplaneLight ^ halfplaneTestPoint) // xor
+                    {
+                        _vecLight.X = -_vecLight.X;
+                        _vecLight.Y = -_vecLight.Y;
                     }
                 }
+                // now set new pt 
+                _ptLight = ptIntersect.Value;
+                SetColor((_colorReflection + 1) & 0xffffff);
             }
-            NativeMethods.ReleaseDC(_hwnd, hdc);
+            NativeMethods.ReleaseDC(_hwnd, hDC);
         }
 
-        public override void OnReady(IntPtr hwnd)
+        void SetColor(int color)
+        {
+            if (ChangeColor)
+            {
+                _colorReflection = color;
+                var res = NativeMethods.DeleteObject(_clrFillReflection);
+                if (res == IntPtr.Zero)
+                {
+                    var x = "no deletion";
+                }
+                _clrFillReflection = NativeMethods.CreatePen(nPenStyle: 0, nWidth: _nPenWidth, nColor: (IntPtr)_colorReflection);
+            }
+            else
+            {
+                if (_colorReflection != 0xff) // red
+                {
+                    _colorReflection = 0xff;
+                    var res = NativeMethods.DeleteObject(_clrFillReflection);
+                    if (res == IntPtr.Zero)
+                    {
+                        var x = "no deletion";
+                    }
+                    _clrFillReflection = NativeMethods.CreatePen(nPenStyle: 0, nWidth: _nPenWidth, nColor: (IntPtr)_colorReflection);
+                }
+            }
+        }
+
+        public bool IsRunning
+        {
+            get => _isRunning;
+            set
+            {
+                _isRunning = value;
+                if (value)
+                {
+                    StartDrawingTask();
+                }
+                else
+                {
+                    EnsureCancelled();
+                }
+                RaisePropChanged();
+            }
+        }
+
+        void EnsureCancelled()
         {
             while (_tskDrawing != null && !(_tskDrawing.IsCanceled || _tskDrawing.IsCompleted))
             {
                 _cts.Cancel();
+                //App.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => { })).Wait(); ;
                 Thread.Sleep(10);
             }
+        }
+        public override void OnReady(IntPtr hwnd)
+        {
+            IsRunning = false;
+            Clear(fKeepUserMirrors: true);
+        }
+
+        private void StartDrawingTask()
+        {
+            // do drawing in a background thread
             _cts = new CancellationTokenSource();
             _tskDrawing = Task.Run(() =>
             {
-                DoDrawing();
+                DoReflecting();
             });
-
         }
 
         void AddLine(CLine line)
         {
-            lock (_lstLines)
+            lock (_lstMirrors)
             {
-                _lstLines.Add(line);
+                _lstMirrors.Add(line);
             }
         }
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
             base.OnRenderSizeChanged(sizeInfo);
+            //            btnClear(sizeInfo.NewSize);
+            Clear(fKeepUserMirrors: false);
+
+        }
+
+        public void Clear(bool fKeepUserMirrors)
+        {
+            var newSize = new Size(this.ActualWidth, this.ActualHeight);
+
+            this.EraseRect();
             var mrg = 4;
             var ptTopLeft = new Point(mrg, mrg);
-            var ptTopRight = new Point(sizeInfo.NewSize.Width - 1 - mrg, mrg);
-            var ptBotLeft = new Point(mrg, sizeInfo.NewSize.Height - 1 - mrg);
-            var ptBotRight = new Point(sizeInfo.NewSize.Width - 1 - mrg, sizeInfo.NewSize.Height - 1 - mrg);
+            var ptTopRight = new Point(newSize.Width - 1 - mrg, mrg);
+            var ptBotLeft = new Point(mrg, newSize.Height - 1 - mrg);
+            var ptBotRight = new Point(newSize.Width - 1 - mrg, newSize.Height - 1 - mrg);
             _ptOldMouseDown = null;
             _fPenDown = false;
             _fPenModeDrag = false;
             _ptLight = new Point(mrg * 2, mrg * 2);
-            _vecLight = new Vector(10, 1);
-            lock (this._lstLines)
+            _vecLight = new Vector(10, 10);
+            _nOutofBounds = 0;
+            if (!fKeepUserMirrors)
             {
-                this._lstLines.Clear();
-                this._lstLines.Add(new CLine(ptTopLeft, ptTopRight));
-                this._lstLines.Add(new CLine(ptTopRight, ptBotRight));
-                this._lstLines.Add(new CLine(new Point(sizeInfo.NewSize.Width - 10, 0), new Point(sizeInfo.NewSize.Width - 9, 400)));
-                this._lstLines.Add(new CLine(ptBotRight, ptBotLeft));
-                this._lstLines.Add(new CLine(ptTopLeft, ptBotLeft));
-                this._lstLines.Add(new CLine(ptBotLeft, ptTopRight));
-                var l1 = new CLine(new Point(0, 0), new Point(sizeInfo.NewSize.Height - 1, sizeInfo.NewSize.Width - 1));
-                this._lstLines.Add(l1);
+                lock (this._lstMirrors)
+                {
+                    this._lstMirrors.Clear();
+                    this._lstMirrors.Add(new CLine(ptTopLeft, ptTopRight));
+                    this._lstMirrors.Add(new CLine(ptTopRight, ptBotRight));
+                    this._lstMirrors.Add(new CLine(ptBotRight, ptBotLeft));
+                    this._lstMirrors.Add(new CLine(ptTopLeft, ptBotLeft));
+                }
             }
-            _fReDraw = true;
+            DrawMirrors();
         }
 
         Point? _ptOldMouseDown;
         Point _ptCurrentMouseDown;
         bool _fPenModeDrag = false;
         bool _fPenDown = false;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        void RaisePropChanged([CallerMemberName] string propName = "")
+        {
+            if (PropertyChanged != null)
+            {
+                PropertyChanged(this, new PropertyChangedEventArgs(propName));
+            }
+        }
+        //const int WM_MOUSEMOVE = 0x200;
+        //const int WM_LBUTTONDOWN = 0x201;
+        //const int WM_LBUTTONUP = 0x202;
+        //const int WM_RBUTTONDOWN = 0x204;
+        //const int WM_RBUTTONUP = 0x205;
+
+        //protected override IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        //{
+        //    switch (msg)
+        //    {
+        //        case WM_MOUSEMOVE:
+        //            var x = 2;
+        //            break;
+        //        case WM_LBUTTONDOWN:
+        //            var x2 = 2;
+        //            break;
+        //        case WM_LBUTTONUP:
+        //            var x3 = 2;
+        //            break;
+        //    }
+        //    return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
+        //}
+
+        void ShowMouseStatus()
+        {
+            ReflectWindow.AddStatusMessage($"PenDown={_fPenDown} Drag={_fPenModeDrag} OldPt={_ptOldMouseDown}  CurPt={_ptCurrentMouseDown}");
+        }
         internal void DoMouseDown(object om, MouseButtonEventArgs em)
         {
             if (em.RightButton == MouseButtonState.Pressed)
             {
                 _fPenModeDrag = !_fPenModeDrag;
+                _ptOldMouseDown = em.GetPosition(this);
             }
             else
             {
@@ -362,25 +610,33 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     {
                         _ptOldMouseDown = _ptCurrentMouseDown;
                     }
-                    _fReDraw = true;
+                    //                    DrawMirrors();
                 }
             }
+            ShowMouseStatus();
         }
 
         internal void DoMouseMove(object om, MouseEventArgs em)
         {
             if (_fPenModeDrag)
             {
-                if (em.LeftButton == MouseButtonState.Pressed)
+                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
                 {
                     if (_ptOldMouseDown.HasValue)
                     {
                         _ptCurrentMouseDown = em.GetPosition(this);
-                        var line = new CLine(_ptOldMouseDown.Value, _ptCurrentMouseDown);
-                        AddLine(line);
-                        _ptOldMouseDown = _ptCurrentMouseDown;
-                        _fReDraw = true;
+                        if (_ptCurrentMouseDown != _ptOldMouseDown)
+                        {
+                            var line = new CLine(_ptOldMouseDown.Value, _ptCurrentMouseDown);
+                            AddLine(line);
+                            _ptOldMouseDown = _ptCurrentMouseDown;
+                            DrawMirrors();
+                        }
                     }
+                }
+                else
+                {
+                    _ptOldMouseDown = null;
                 }
             }
             else
@@ -391,9 +647,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     {
                         _ptCurrentMouseDown = em.GetPosition(this);
                     }
-                    _fReDraw = true;
+                    //                    DrawMirrors();
                 }
             }
+            ShowMouseStatus();
         }
 
         internal void DoMouseUp(object om, MouseButtonEventArgs em)
@@ -401,11 +658,40 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             if (_fPenDown)
             {
                 _ptCurrentMouseDown = em.GetPosition(this);
-                var line = new CLine(_ptOldMouseDown.Value, _ptCurrentMouseDown);
-                AddLine(line);
-                _ptOldMouseDown = _ptCurrentMouseDown;
-                _fPenDown = false;
-                _fReDraw = true;
+                if (_ptCurrentMouseDown != _ptOldMouseDown)
+                {
+                    var line = new CLine(_ptOldMouseDown.Value, _ptCurrentMouseDown);
+                    AddLine(line);
+                    _ptOldMouseDown = _ptCurrentMouseDown;
+                    _fPenDown = false;
+                    DrawMirrors();
+                }
+            }
+            ShowMouseStatus();
+        }
+
+        internal void DoKeyDown(object ok, KeyEventArgs ek)
+        {
+            switch (ek.Key)
+            {
+                case Key.Z:
+                    if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                    {
+                        // keep 4 walls
+                        lock (_lstMirrors)
+                        {
+                            if (_lstMirrors.Count > 4)
+                            {
+                                var lastMirror = _lstMirrors.Last();
+                                _lstMirrors.RemoveAt(_lstMirrors.Count - 1);
+                                Clear(fKeepUserMirrors: true);
+                                _ptOldMouseDown = lastMirror.pt1;
+                                ShowMouseStatus();
+                            }
+
+                        }
+                    }
+                    break;
             }
         }
 
@@ -459,19 +745,12 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             public Point? IntersectingPoint(CLine otherLine)
             {
                 Point? result = null;
-                var x1 = this.pt0.X;
-                var y1 = this.pt0.Y;
-                var x2 = this.pt1.X;
-                var y2 = this.pt1.Y;
-                var x3 = otherLine.pt0.X;
-                var y3 = otherLine.pt0.Y;
-                var x4 = otherLine.pt1.X;
-                var y4 = otherLine.pt1.Y;
-                var denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+                var denom = (this.pt0.X - this.pt1.X) * (otherLine.pt0.Y - otherLine.pt1.Y) - (this.pt0.Y - this.pt1.Y) * (otherLine.pt0.X - otherLine.pt1.X);
+
                 if (denom != 0)
                 {
-                    var x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom;
-                    var y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom;
+                    var x = ((this.pt0.X * this.pt1.Y - this.pt0.Y * this.pt1.X) * (otherLine.pt0.X - otherLine.pt1.X) - (this.pt0.X - this.pt1.X) * (otherLine.pt0.X * otherLine.pt1.Y - otherLine.pt0.Y * otherLine.pt1.X)) / denom;
+                    var y = ((this.pt0.X * this.pt1.Y - this.pt0.Y * this.pt1.X) * (otherLine.pt0.Y - otherLine.pt1.Y) - (this.pt0.Y - this.pt1.Y) * (otherLine.pt0.X * otherLine.pt1.Y - otherLine.pt0.Y * otherLine.pt1.X)) / denom;
                     result = new Point(x, y);
                 }
                 return result;
@@ -504,7 +783,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
             public override string ToString()
             {
-                return $"({pt0}),({pt1})";
+                return $"({pt0.X:n1},{pt0.Y:n1}),({pt1.X:n1},{pt1.Y:n1})";
             }
             internal double CalculateDistanceFromPoint(Point ptLight)
             {
@@ -512,6 +791,17 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 return numerator / lazyLineSegLength.Value;
             }
 
+        }
+    }
+    // a textbox that selects all when focused:
+    public class MyTextBox : TextBox
+    {
+        public MyTextBox()
+        {
+            this.GotFocus += (o, e) =>
+            {
+                this.SelectAll();
+            };
         }
     }
     static class ExtensionMethods
@@ -524,7 +814,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             var xd = pt.X - otherPoint.X;
             var yd = pt.Y - otherPoint.Y;
-            return Math.Sqrt(xd * xd + yd * yd);
+            return Math.Sqrt(xd.squared() + yd.squared());
         }
         public static Point Add(this Point pt, Point other)
         {
