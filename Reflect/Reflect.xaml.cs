@@ -177,7 +177,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                       if (bounceFrame.nDelay > 0)
                       {
                           //inc = (int)Math.Pow(10, (int)Math.Log10(bounceFrame.nDelay) - 1); // logarithmic
-                          inc = (int)(.25 * bounceFrame.nDelay); // %
+                          inc = (int)(.5 * bounceFrame.nDelay); // 50%
                           if (inc == 0)
                           {
                               inc = 1;
@@ -333,12 +333,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             // let's see if the intersection point is within the mirror's edges
                             if (mirror.pt0.DistanceFromPoint(ptIntersectTest.Value) +
                                 ptIntersectTest.Value.DistanceFromPoint(mirror.pt1) - mirror.LineLength < .00001)
-                            //if (line.pt0.X <= ptIntersect.Value.X && ptIntersect.Value.X <= line.pt1.X &&
-                            //    line.pt0.Y <= ptIntersect.Value.Y && ptIntersect.Value.Y <= line.pt1.Y
-                            //    ||
-                            //    line.pt0.X >= ptIntersect.Value.X && ptIntersect.Value.X >= line.pt1.X &&
-                            //    line.pt0.Y >= ptIntersect.Value.Y && ptIntersect.Value.Y >= line.pt1.Y
-                            //    )
                             {
                                 var ss = Math.Sign(_vecLight.X);
                                 var s2 = Math.Sign(ptIntersectTest.Value.X - _ptLight.X);
@@ -776,12 +770,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 return $"({pt0.X:n1},{pt0.Y:n1}),({pt1.X:n1},{pt1.Y:n1})";
             }
-            internal double CalculateDistanceFromPoint(Point ptLight)
-            {
-                double numerator = Math.Abs((pt1.Y - pt0.Y) * ptLight.X - (pt1.X - pt0.X) * ptLight.Y + pt1.X * pt0.Y - pt1.Y * pt0.X);
-                return numerator / lazyLineSegLength.Value;
-            }
-
         }
     }
     // a textbox that selects all when focused:
