@@ -459,7 +459,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             if (ChangeColor)
             {
                 _colorReflection = color;
-                var res = NativeMethods.DeleteObject(_clrFillReflection);
+                NativeMethods.DeleteObject(_clrFillReflection);
                 _clrFillReflection = NativeMethods.CreatePen(nPenStyle: 0, nWidth: _nPenWidth, nColor: (IntPtr)_colorReflection);
             }
             else
@@ -467,7 +467,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 if (_colorReflection != 0xff) // red
                 {
                     _colorReflection = 0xff;
-                    var res = NativeMethods.DeleteObject(_clrFillReflection);
+                    NativeMethods.DeleteObject(_clrFillReflection);
                     _clrFillReflection = NativeMethods.CreatePen(nPenStyle: 0, nWidth: _nPenWidth, nColor: (IntPtr)_colorReflection);
                 }
             }
