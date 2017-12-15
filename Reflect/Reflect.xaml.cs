@@ -178,7 +178,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                       if (bounceFrame.nDelay > 0)
                       {
                           //inc = (int)Math.Pow(10, (int)Math.Log10(bounceFrame.nDelay) - 1); // logarithmic
-                          inc = (int)(.25 * bounceFrame.nDelay); // %
+                          inc = (int)(.5 * bounceFrame.nDelay); // 50%
                           if (inc == 0)
                           {
                               inc = 1;
