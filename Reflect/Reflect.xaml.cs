@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -256,7 +257,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public bool ChangeColor { get; set; } = true;
 
         bool _isRunning;
-        List<CLine> _lstMirrors = new List<CLine>();
+        List<CMirror> _lstMirrors = new List<CMirror>();
         NativeMethods.WinPoint _ptPrev = new NativeMethods.WinPoint();
         public BounceFrame(
             IntPtr hbrBackground
@@ -271,10 +272,23 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             NativeMethods.SelectObject(hdc, _clrMirror);
             lock (_lstMirrors)
             {
-                foreach (var line in _lstMirrors)
+                foreach (var mirror in _lstMirrors)
                 {
-                    NativeMethods.MoveToEx(hdc, (int)(xScale * line.pt0.X), (int)(yScale * line.pt0.Y), ref _ptPrev);
-                    NativeMethods.LineTo(hdc, (int)(xScale * line.pt1.X), (int)(yScale * line.pt1.Y));
+                    if (mirror.MirrorType == CMirror.MirrorTypes.MirrorTypeLine)
+                    {
+                        CLine line = mirror._line;
+                        NativeMethods.MoveToEx(hdc, (int)(xScale * line.pt0.X), (int)(yScale * line.pt0.Y), ref _ptPrev);
+                        NativeMethods.LineTo(hdc, (int)(xScale * line.pt1.X), (int)(yScale * line.pt1.Y));
+                    }
+                    else
+                    {
+                        var ellipse = mirror._ellipse;
+                        nativeMethods.Arc(hdc,
+                            (int)(xScale * ellipse.ptTopLeft.X), (int)(yScale * ellipse.ptTopLeft.Y),
+                            (int)(xScale * ellipse.ptBotRight.X), (int)(yScale * ellipse.ptBotRight.Y),
+                            (int)(xScale * (ellipse.ptTopLeft.X + ellipse.Width)), (int)(yScale * (ellipse.ptTopLeft.Y + ellipse.Height / 2)),
+                            (int)(xScale * (ellipse.ptTopLeft.X)), (int)(yScale * (ellipse.ptTopLeft.Y + ellipse.Height / 2)));
+                    }
                 }
                 NativeMethods.ReleaseDC(_hwnd, hdc);
             }
@@ -324,40 +338,46 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 Point? ptIntersect = null; // the point of intersection of the light vector and the closest mirror
                 lock (_lstMirrors)
                 {
-                    foreach (var line in _lstMirrors)
+                    foreach (var mirror in _lstMirrors)
                     {
-                        var ptIntersectTest = lnIncident.IntersectingPoint(line);
+                        var ptIntersectTest = mirror.IntersectingPoint(lnIncident);
                         if (ptIntersectTest.HasValue)
                         {
-                            // the incident line intersects the mirror. Our mirrors have non-infinite width
-                            // let's see if the intersection point is within the mirror's edges
-                            if (line.pt0.DistanceFromPoint(ptIntersectTest.Value) +
-                                ptIntersectTest.Value.DistanceFromPoint(line.pt1) - line.LineLength < .00001)
-                            //if (line.pt0.X <= ptIntersect.Value.X && ptIntersect.Value.X <= line.pt1.X &&
-                            //    line.pt0.Y <= ptIntersect.Value.Y && ptIntersect.Value.Y <= line.pt1.Y
-                            //    ||
-                            //    line.pt0.X >= ptIntersect.Value.X && ptIntersect.Value.X >= line.pt1.X &&
-                            //    line.pt0.Y >= ptIntersect.Value.Y && ptIntersect.Value.Y >= line.pt1.Y
-                            //    )
+                            if (mirror.MirrorType == CMirror.MirrorTypes.MirrorTypeLine)
                             {
-                                var ss = Math.Sign(_vecLight.X);
-                                var s2 = Math.Sign(ptIntersectTest.Value.X - _ptLight.X);
-                                if (ss * s2 == 1) // in our direction?
+                                var line = mirror._line;
+                                // the incident line intersects the mirror. Our mirrors have non-infinite width
+                                // let's see if the intersection point is within the mirror's edges
+                                if (line.pt0.DistanceFromPoint(ptIntersectTest.Value) +
+                                    ptIntersectTest.Value.DistanceFromPoint(line.pt1) - line.LineLength < .00001)
+                                //if (line.pt0.X <= ptIntersect.Value.X && ptIntersect.Value.X <= line.pt1.X &&
+                                //    line.pt0.Y <= ptIntersect.Value.Y && ptIntersect.Value.Y <= line.pt1.Y
+                                //    ||
+                                //    line.pt0.X >= ptIntersect.Value.X && ptIntersect.Value.X >= line.pt1.X &&
+                                //    line.pt0.Y >= ptIntersect.Value.Y && ptIntersect.Value.Y >= line.pt1.Y
+                                //    )
                                 {
-                                    var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
-
-                                    if (dist > .001 && dist < minDist)
+                                    var ss = Math.Sign(_vecLight.X);
+                                    var s2 = Math.Sign(ptIntersectTest.Value.X - _ptLight.X);
+                                    if (ss * s2 == 1) // in our direction?
                                     {
-                                        minDist = dist;
-                                        lnMirror = line;
-                                        ptIntersect = ptIntersectTest.Value;
+                                        var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
+
+                                        if (dist > .001 && dist < minDist)
+                                        {
+                                            minDist = dist;
+                                            lnMirror = line;
+                                            ptIntersect = ptIntersectTest.Value;
+                                        }
                                     }
                                 }
                             }
-                        }
-                        else
-                        {
-                            //                            Debug.Assert(false, "parallel");
+                            else
+                            {
+                                var ellipse = mirror._ellipse;
+
+                                //                            Debug.Assert(false, "parallel");
+                            }
                         }
                     }
                 }
@@ -440,10 +460,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 _colorReflection = color;
                 var res = NativeMethods.DeleteObject(_clrFillReflection);
-                if (res == IntPtr.Zero)
-                {
-                    var x = "no deletion";
-                }
                 _clrFillReflection = NativeMethods.CreatePen(nPenStyle: 0, nWidth: _nPenWidth, nColor: (IntPtr)_colorReflection);
             }
             else
@@ -452,10 +468,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 {
                     _colorReflection = 0xff;
                     var res = NativeMethods.DeleteObject(_clrFillReflection);
-                    if (res == IntPtr.Zero)
-                    {
-                        var x = "no deletion";
-                    }
                     _clrFillReflection = NativeMethods.CreatePen(nPenStyle: 0, nWidth: _nPenWidth, nColor: (IntPtr)_colorReflection);
                 }
             }
@@ -508,7 +520,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             lock (_lstMirrors)
             {
-                _lstMirrors.Add(line);
+                _lstMirrors.Add(new CMirror( line));
             }
         }
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -540,10 +552,15 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 lock (this._lstMirrors)
                 {
                     this._lstMirrors.Clear();
-                    this._lstMirrors.Add(new CLine(ptTopLeft, ptTopRight));
-                    this._lstMirrors.Add(new CLine(ptTopRight, ptBotRight));
-                    this._lstMirrors.Add(new CLine(ptBotRight, ptBotLeft));
-                    this._lstMirrors.Add(new CLine(ptTopLeft, ptBotLeft));
+                    this._lstMirrors.Add(new CMirror(new CLine(ptTopLeft, ptTopRight)));
+                    this._lstMirrors.Add(new CMirror(new CLine(ptTopRight, ptBotRight)));
+                    this._lstMirrors.Add(new CMirror(new CLine(ptBotRight, ptBotLeft)));
+                    this._lstMirrors.Add(new CMirror(new CLine(ptTopLeft, ptBotLeft)));
+                    var ellipse = new CEllipse(
+                        new Point(20, 20),
+                        new Point(800, 400)
+                    );
+                    this._lstMirrors.Add(new CMirror(ellipse));
                 }
             }
             DrawMirrors();
@@ -677,21 +694,71 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 case Key.Z:
                     if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
                     {
-                        // keep 4 walls
                         lock (_lstMirrors)
                         {
+                            // keep 4 walls
                             if (_lstMirrors.Count > 4)
                             {
                                 var lastMirror = _lstMirrors.Last();
                                 _lstMirrors.RemoveAt(_lstMirrors.Count - 1);
                                 Clear(fKeepUserMirrors: true);
-                                _ptOldMouseDown = lastMirror.pt1;
+                                _ptOldMouseDown = lastMirror._line.pt1;
                                 ShowMouseStatus();
                             }
-
                         }
                     }
                     break;
+            }
+        }
+
+        public class CMirror
+        {
+            public enum MirrorTypes
+            {
+                MirrorTypeLine,
+                MirrorTypeEllipse
+            }
+            public CLine _line;
+            public CEllipse _ellipse;
+            public MirrorTypes MirrorType { get { return _line == null ? MirrorTypes.MirrorTypeEllipse : MirrorTypes.MirrorTypeLine; } }
+            public CMirror(CLine line)
+            {
+                this._line = line;
+            }
+            public CMirror(CEllipse ellipse)
+            {
+                this._ellipse = ellipse;
+            }
+            public Point? IntersectingPoint(CLine line)
+            {
+                if (this.MirrorType == MirrorTypes.MirrorTypeEllipse)
+                {
+                    return _ellipse.IntersectingPoint(line);
+                }
+                return _line.IntersectingPoint(line);
+            }
+        }
+
+        /// <summary>
+        /// Defined by a bounding rectangle with 2 points: topleft and bottom right
+        /// </summary>
+        public class CEllipse
+        {
+            public Point ptTopLeft { get; private set; }
+            public Point ptBotRight { get; private set; }
+            public double Width { get { return ptBotRight.X - ptTopLeft.X; } }
+            public double Height { get { return ptBotRight.Y - ptTopLeft.Y; } }
+
+            public CEllipse(Point ptTopLeft, Point ptBotRight)
+            {
+                this.ptTopLeft = ptTopLeft;
+                this.ptBotRight = ptBotRight;
+            }
+            // https://social.msdn.microsoft.com/Forums/windowsapps/en-US/b599db66-a987-4dba-b5b9-7babc9badc9c/finding-the-intersection-points-of-a-line-and-an-ellipse?forum=wpdevelop
+            public Point? IntersectingPoint(CLine line)
+            {
+                Point? ptIntersect = null;
+                return ptIntersect;
             }
         }
 
@@ -785,12 +852,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 return $"({pt0.X:n1},{pt0.Y:n1}),({pt1.X:n1},{pt1.Y:n1})";
             }
-            internal double CalculateDistanceFromPoint(Point ptLight)
-            {
-                double numerator = Math.Abs((pt1.Y - pt0.Y) * ptLight.X - (pt1.X - pt0.X) * ptLight.Y + pt1.X * pt0.Y - pt1.Y * pt0.X);
-                return numerator / lazyLineSegLength.Value;
-            }
-
         }
     }
     // a textbox that selects all when focused:
@@ -821,6 +882,21 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             Point res = new Point(pt.X + other.X, pt.Y + other.Y);
             return res;
         }
+    }
 
+    public partial class nativeMethods
+    {
+        [DllImport("gdi32")]
+        public static extern int Arc(
+          IntPtr hdc,
+          int nLeftRect,
+          int nTopRect,
+          int nRightRect,
+          int nBottomRect,
+          int nXStartArc,
+          int nYStartArc,
+          int nXEndArc,
+          int nYEndArc
+        );
     }
 }
