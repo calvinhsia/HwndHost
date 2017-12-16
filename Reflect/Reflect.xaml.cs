@@ -705,11 +705,23 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     var thislinelen = this.LineLength;
                     if (distPt0 + distPt1 - thislinelen < .00001)
                     {
-                        var ss = Math.Sign(vecLight.X);
-                        var s2 = Math.Sign(ptIntersectTest.Value.X - ptLight.X);
-                        if (ss * s2 == 1) // in our direction?
+                        if (vecLight.X == 0) // vert
                         {
-                            ptIntersect = ptIntersectTest.Value;
+                            var ss = Math.Sign(vecLight.Y);
+                            var s2 = Math.Sign(ptIntersectTest.Value.Y - ptLight.Y);
+                            if (ss * s2 == 1) // in our direction?
+                            {
+                                ptIntersect = ptIntersectTest.Value;
+                            }
+                        }
+                        else  // horiz
+                        {
+                            var ss = Math.Sign(vecLight.X);
+                            var s2 = Math.Sign(ptIntersectTest.Value.X - ptLight.X);
+                            if (ss * s2 == 1) // in our direction?
+                            {
+                                ptIntersect = ptIntersectTest.Value;
+                            }
                         }
                     }
                 }
