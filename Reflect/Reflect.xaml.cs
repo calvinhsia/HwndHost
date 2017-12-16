@@ -724,6 +724,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             public Point Center { get { return new Point(ptTopLeft.X + Width / 2, ptTopLeft.Y + Height / 2); } }
             public double d1 { get { return Center.X; } }
             public double d2 { get { return Center.Y; } }
+            /// <summary>
+            /// focus: distance from center to focus. other is negative of this
+            /// </summary>
+            public double f {  get { return Math.Sqrt(Math.Abs(a * a - b * b)); } }
             public CEllipse(Point ptTopLeft, Point ptBotRight, Point ptStartArc, Point ptEndArc)
             {
                 this.ptTopLeft = ptTopLeft;
@@ -796,7 +800,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
             internal Vector Reflect(Point ptLight, Vector vecLight, Point ptIntersect)
             {
-
+                // calculate the tangent line at that point.
+                var m = b * b * ptIntersect.X / (a*a*ptIntersect.Y);
+                vecLight.X = SpeedMult;
+                vecLight.Y = m * SpeedMult;
                 return vecLight;
             }
             public override string ToString()
