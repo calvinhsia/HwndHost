@@ -345,12 +345,12 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 {
                     foreach (var mirror in _lstMirrors)
                     {
-                        if (mirror.MirrorType == CMirror.MirrorTypes.MirrorTypeLine)
+                        var ptIntersectTest = mirror.IntersectingPoint(_ptLight, _vecLight);
+                        if (ptIntersectTest.HasValue)
                         {
-                            var line = mirror._line;
-                            var ptIntersectTest = line.IntersectingPoint(_ptLight, _vecLight);
-                            if (ptIntersectTest.HasValue)
+                            if (mirror.MirrorType == CMirror.MirrorTypes.MirrorTypeLine)
                             {
+                                var line = mirror._line;
                                 var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
 
                                 if (dist > .001 && dist < minDist)
@@ -363,8 +363,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             else
                             {
                                 var ellipse = mirror._ellipse;
-
                             }
+
                         }
                     }
                 }
@@ -675,7 +675,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             if (_fPenDown)
             {
                 _ptCurrentMouseDown = em.GetPosition(this);
-                if (_ptCurrentMouseDown != _ptOldMouseDown)
+                if (_ptOldMouseDown.HasValue && _ptCurrentMouseDown != _ptOldMouseDown)
                 {
                     var line = new CLine(_ptOldMouseDown.Value, _ptCurrentMouseDown);
                     AddMirror(new CMirror(line));
@@ -729,6 +729,15 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 this._ellipse = ellipse;
             }
+
+            internal Point? IntersectingPoint(Point ptLight, Vector vecLight)
+            {
+                if (this.MirrorType == MirrorTypes.MirrorTypeLine)
+                {
+                    return this._line.IntersectingPoint(ptLight, vecLight);
+                }
+                return this._ellipse.IntersectingPoint(ptLight, vecLight);
+            }
         }
 
         /// <summary>
@@ -775,6 +784,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
 
                 return ptIntersect;
+            }
+
+            internal Point? IntersectingPoint(Point ptLight, Vector vecLight)
+            {
+                return null;
             }
         }
 
