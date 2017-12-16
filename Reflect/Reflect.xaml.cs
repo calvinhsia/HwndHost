@@ -256,7 +256,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public bool ChangeColor { get; set; } = true;
 
         bool _isRunning;
-        List<CMirror> _lstMirrors = new List<CMirror>();
+        List<CLine> _lstMirrors = new List<CLine>();
         NativeMethods.WinPoint _ptPrev = new NativeMethods.WinPoint();
         public BounceFrame(
             IntPtr hbrBackground
@@ -317,41 +317,25 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
                 // for each line determine the intersection of our light vector incident line, which is just a segment
                 // if it's behind, ignore it
-                var lnIncident = new CMirror(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
+                var lnIncident = new CLine(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
 
-                CMirror lnMirror = null;
+                CLine lnMirror = null;
                 double minDist = double.MaxValue;
                 Point? ptIntersect = null; // the point of intersection of the light vector and the closest mirror
                 lock (_lstMirrors)
                 {
                     foreach (var mirror in _lstMirrors)
                     {
-                        var ptIntersectTest = mirror.IntersectingPoint(lnIncident);
+                        var ptIntersectTest = mirror.IntersectingPoint(_ptLight, _vecLight);
                         if (ptIntersectTest.HasValue)
                         {
-                            // the incident line intersects the mirror. Our mirrors have non-infinite width
-                            // let's see if the intersection point is within the mirror's edges
-                            if (mirror.pt0.DistanceFromPoint(ptIntersectTest.Value) +
-                                ptIntersectTest.Value.DistanceFromPoint(mirror.pt1) - mirror.LineLength < .00001)
+                            var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
+                            if (dist > .001 && dist < minDist)
                             {
-                                var ss = Math.Sign(_vecLight.X);
-                                var s2 = Math.Sign(ptIntersectTest.Value.X - _ptLight.X);
-                                if (ss * s2 == 1) // in our direction?
-                                {
-                                    var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
-
-                                    if (dist > .001 && dist < minDist)
-                                    {
-                                        minDist = dist;
-                                        lnMirror = mirror;
-                                        ptIntersect = ptIntersectTest.Value;
-                                    }
-                                }
+                                minDist = dist;
+                                lnMirror = mirror;
+                                ptIntersect = ptIntersectTest.Value;
                             }
-                        }
-                        else
-                        {
-                            //                            Debug.Assert(false, "parallel");
                         }
                     }
                 }
@@ -490,7 +474,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             });
         }
 
-        void AddLine(CMirror mirror)
+        void AddLine(CLine mirror)
         {
             lock (_lstMirrors)
             {
@@ -525,10 +509,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 lock (this._lstMirrors)
                 {
                     this._lstMirrors.Clear();
-                    this._lstMirrors.Add(new CMirror(ptTopLeft, ptTopRight));
-                    this._lstMirrors.Add(new CMirror(ptTopRight, ptBotRight));
-                    this._lstMirrors.Add(new CMirror(ptBotRight, ptBotLeft));
-                    this._lstMirrors.Add(new CMirror(ptTopLeft, ptBotLeft));
+                    this._lstMirrors.Add(new CLine(ptTopLeft, ptTopRight));
+                    this._lstMirrors.Add(new CLine(ptTopRight, ptBotRight));
+                    this._lstMirrors.Add(new CLine(ptBotRight, ptBotLeft));
+                    this._lstMirrors.Add(new CLine(ptTopLeft, ptBotLeft));
                 }
             }
             DrawMirrors();
@@ -612,7 +596,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         _ptCurrentMouseDown = em.GetPosition(this);
                         if (_ptCurrentMouseDown != _ptOldMouseDown)
                         {
-                            var line = new CMirror(_ptOldMouseDown.Value, _ptCurrentMouseDown);
+                            var line = new CLine(_ptOldMouseDown.Value, _ptCurrentMouseDown);
                             AddLine(line);
                             _ptOldMouseDown = _ptCurrentMouseDown;
                             DrawMirrors();
@@ -645,7 +629,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 _ptCurrentMouseDown = em.GetPosition(this);
                 if (_ptCurrentMouseDown != _ptOldMouseDown)
                 {
-                    var line = new CMirror(_ptOldMouseDown.Value, _ptCurrentMouseDown);
+                    var line = new CLine(_ptOldMouseDown.Value, _ptCurrentMouseDown);
                     AddLine(line);
                     _ptOldMouseDown = _ptCurrentMouseDown;
                     _fPenDown = false;
@@ -673,21 +657,20 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 _ptOldMouseDown = lastMirror.pt1;
                                 ShowMouseStatus();
                             }
-
                         }
                     }
                     break;
             }
         }
 
-        public class CMirror
+        public class CLine
         {
             public Point pt0 { get; private set; }
             public Point pt1 { get; private set; }
             Lazy<double> lazyLineSegLength;
             public double LineLength => lazyLineSegLength.Value;
 
-            public CMirror(Point p0, Point p1)
+            public CLine(Point p0, Point p1)
             {
                 this.pt0 = p0;
                 this.pt1 = p1;
@@ -707,7 +690,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             public double deltaX => pt1.X - pt0.X;
             public double deltaY => pt1.Y - pt0.Y;
 
-            public double angleBetween(CMirror otherLine)
+            public double angleBetween(CLine otherLine)
             {
                 double tantheta = 0;
                 if (pt1.X == pt0.X) // vertical line
@@ -727,7 +710,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 return Math.Atan(tantheta) / _piOver180;
             }
 
-            public Point? IntersectingPoint(CMirror otherLine)
+            public Point? IntersectingPoint(CLine otherLine)
             {
                 Point? result = null;
                 var denom = (this.pt0.X - this.pt1.X) * (otherLine.pt0.Y - otherLine.pt1.Y) - (this.pt0.Y - this.pt1.Y) * (otherLine.pt0.X - otherLine.pt1.X);
@@ -739,6 +722,34 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     result = new Point(x, y);
                 }
                 return result;
+            }
+            /// <summary>
+            /// Given a point and a vector direction, determine the point of intersection if any
+            /// </summary>
+            /// <returns></returns>
+            internal Point? IntersectingPoint(Point ptLight, Vector vecLight)
+            {
+                Point? ptIntersect = null;
+                var lnIncident = new CLine(ptLight, new Point(ptLight.X + vecLight.X, ptLight.Y + vecLight.Y));
+                Point? ptIntersectTest = this.IntersectingPoint(lnIncident);
+                // the incident line intersects the mirror. Our mirrors have finite width
+                // let's see if the intersection point is within the mirror's edges
+                if (ptIntersectTest.HasValue)
+                {
+                    var distPt0 = this.pt0.DistanceFromPoint(ptIntersectTest.Value);
+                    var distPt1 = ptIntersectTest.Value.DistanceFromPoint(this.pt1);
+                    var thislinelen = this.LineLength;
+                    if (distPt0 + distPt1 - thislinelen < .00001)
+                    {
+                        var ss = Math.Sign(vecLight.X);
+                        var s2 = Math.Sign(ptIntersectTest.Value.X - ptLight.X);
+                        if (ss * s2 == 1) // in our direction?
+                        {
+                            ptIntersect = ptIntersectTest.Value;
+                        }
+                    }
+                }
+                return ptIntersect;
             }
 
             public double DistanceToPoint(Point pt)
