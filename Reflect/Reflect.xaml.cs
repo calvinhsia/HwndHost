@@ -338,7 +338,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 // if it's behind, ignore it
                 var lnIncident = new CLine(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
 
-                CLine lnMirror = null;
+                CMirror mirrorClosest = null;
                 double minDist = double.MaxValue;
                 Point? ptIntersect = null; // the point of intersection of the light vector and the closest mirror
                 lock (_lstMirrors)
@@ -348,15 +348,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         var ptIntersectTest = mirror.IntersectingPoint(_ptLight, _vecLight);
                         if (ptIntersectTest.HasValue)
                         {
+                            var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
                             if (mirror.MirrorType == CMirror.MirrorTypes.MirrorTypeLine)
                             {
                                 var line = mirror._line;
-                                var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
-
                                 if (dist > .001 && dist < minDist)
                                 {
                                     minDist = dist;
-                                    lnMirror = line;
+                                    mirrorClosest = mirror;
                                     ptIntersect = ptIntersectTest.Value;
                                 }
                             }
@@ -364,12 +363,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             {
                                 var ellipse = mirror._ellipse;
                             }
-
                         }
                     }
                 }
                 //                                        Debug.Assert(lnMirror != null, "no closest mirror");
-                if (lnMirror == null)
+                if (mirrorClosest == null)
                 {
                     //ReflectWindow.AddStatusMessage($"No closest mirror pt = {_ptLight} vec = {_vecLight}");
                     if (nLastBounceWhenStagnant == nBounces - 1)
@@ -384,9 +382,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         nLastBounceWhenStagnant = nBounces;
                     }
                     continue;
-                    //_cts.Cancel();
-                    //IsRunning = false;
-                    //break;
                 }
                 // now draw incident line from orig pt to intersection
                 NativeMethods.SelectObject(hDC, _clrFillReflection);
@@ -396,44 +391,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
                 NativeMethods.LineTo(hDC, (int)(xScale * ptIntersect.Value.X), (int)(yScale * ptIntersect.Value.Y));
                 // now reflect vector
-                if (lnMirror.deltaX == 0) // vertical line
-                {
-                    _vecLight.X = -_vecLight.X;
-                }
-                else if (lnMirror.deltaY == 0) // horiz line
-                {
-                    _vecLight.Y = -_vecLight.Y;
-                }
-                else
-                {
-                    //// create incident line endpoint to intersection with correct seg length
-                    //var lnIncident = new CLine(_ptLight, ptTarget.Value);
-                    //var angBetween = lnIncidentTest.angleBetween(lnMirror);
-                    //var angClosest = Math.Atan(lnMirror.slope) / _piOver180;
-                    //var angIncident = Math.Atan(lnIncidentTest.slope) / _piOver180;
-                    //var angReflect = 2 * angClosest - angIncident;
-                    var newSlope = Math.Tan(2 * Math.Atan(lnMirror.slope) - Math.Atan(lnIncident.slope));
-                    // now we have the slope of the desired reflection line: 
-                    // now we need to determine the reflection direction (x & y) along the slope
-                    // The incident line came from one side (half plane) of the mirror. We need to leave on the same side.
-                    // to do so, we assume we're going in a particular direction
-                    // then we create a test point using the new slope
-                    // we see which half plane the test point is in relation to the mirror.
-                    // and which half plane the light source is. If they're different, we reverse the vector
-
-                    // first set the new vector to the new slope in a guessed direction. 
-                    _vecLight.X = SpeedMult;
-                    _vecLight.Y = SpeedMult * newSlope;
-                    // create a test point along the line of reflection
-                    var ptTest = new Point(ptIntersect.Value.X + _vecLight.X, ptIntersect.Value.Y + _vecLight.Y);
-                    var halfplaneLight = lnMirror.LeftHalf(_ptLight);
-                    var halfplaneTestPoint = lnMirror.LeftHalf(ptTest);
-                    if (halfplaneLight ^ halfplaneTestPoint) // xor
-                    {
-                        _vecLight.X = -_vecLight.X;
-                        _vecLight.Y = -_vecLight.Y;
-                    }
-                }
+                _vecLight = mirrorClosest.Reflect(_ptLight, _vecLight, ptIntersect.Value);
                 // now set new pt 
                 _ptLight = ptIntersect.Value;
                 SetColor((_colorReflection + 1) & 0xffffff);
@@ -738,6 +696,15 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
                 return this._ellipse.IntersectingPoint(ptLight, vecLight);
             }
+
+            internal Vector Reflect(Point ptLight, Vector vecLight, Point value)
+            {
+                if (this.MirrorType== MirrorTypes.MirrorTypeLine)
+                {
+                    return this._line.Reflect(ptLight, vecLight, value);
+                }
+                return this._ellipse.Reflect(ptLight, vecLight, value);
+            }
         }
 
         /// <summary>
@@ -789,6 +756,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             internal Point? IntersectingPoint(Point ptLight, Vector vecLight)
             {
                 return null;
+            }
+
+            internal Vector Reflect(Point ptLight, Vector vecLight, Point value)
+            {
+                throw new NotImplementedException();
             }
         }
 
@@ -906,6 +878,50 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     }
                 }
                 return ptIntersect;
+            }
+
+            internal Vector Reflect(Point ptLight, Vector vecLight, Point ptIntersect)
+            {
+                if (this.deltaX == 0) // vertical line
+                {
+                    vecLight.X = -vecLight.X;
+                }
+                else if (this.deltaY == 0) // horiz line
+                {
+                    vecLight.Y = -vecLight.Y;
+                }
+                else
+                {
+                    //// create incident line endpoint to intersection with correct seg length
+                    var lnIncident = new CLine(ptLight, new Point(ptLight.X + vecLight.X, ptLight.Y + vecLight.Y));
+                    //var lnIncident = new CLine(_ptLight, ptTarget.Value);
+                    //var angBetween = lnIncidentTest.angleBetween(this);
+                    //var angClosest = Math.Atan(this.slope) / _piOver180;
+                    //var angIncident = Math.Atan(lnIncidentTest.slope) / _piOver180;
+                    //var angReflect = 2 * angClosest - angIncident;
+                    var newSlope = Math.Tan(2 * Math.Atan(this.slope) - Math.Atan(lnIncident.slope));
+                    // now we have the slope of the desired reflection line: 
+                    // now we need to determine the reflection direction (x & y) along the slope
+                    // The incident line came from one side (half plane) of the mirror. We need to leave on the same side.
+                    // to do so, we assume we're going in a particular direction
+                    // then we create a test point using the new slope
+                    // we see which half plane the test point is in relation to the mirror.
+                    // and which half plane the light source is. If they're different, we reverse the vector
+
+                    // first set the new vector to the new slope in a guessed direction. 
+                    vecLight.X = SpeedMult;
+                    vecLight.Y = SpeedMult * newSlope;
+                    // create a test point along the line of reflection
+                    var ptTest = new Point(ptIntersect.X + vecLight.X, ptIntersect.Y + vecLight.Y);
+                    var halfplaneLight = this.LeftHalf(ptLight);
+                    var halfplaneTestPoint = this.LeftHalf(ptTest);
+                    if (halfplaneLight ^ halfplaneTestPoint) // xor
+                    {
+                        vecLight.X = -vecLight.X;
+                        vecLight.Y = -vecLight.Y;
+                    }
+                }
+                return vecLight;
             }
         }
     }
