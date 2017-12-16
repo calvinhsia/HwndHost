@@ -627,7 +627,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             if (_fPenDown)
             {
                 _ptCurrentMouseDown = em.GetPosition(this);
-                if (_ptCurrentMouseDown != _ptOldMouseDown)
+                if (_ptOldMouseDown.HasValue && _ptCurrentMouseDown != _ptOldMouseDown)
                 {
                     var line = new CLine(_ptOldMouseDown.Value, _ptCurrentMouseDown);
                     AddLine(line);
