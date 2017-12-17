@@ -480,9 +480,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             _ptOldMouseDown = null;
             _fPenDown = false;
             _fPenModeDrag = false;
-            _ptLight = new Point(mrg * 2, mrg * 2);
+            _ptLight = new Point(140,140);
             _vecLight = new Vector(10, 1);
             _nOutofBounds = 0;
+            _colorReflection = 0;
             if (!fKeepUserMirrors)
             {
                 lock (this._lstMirrors)
@@ -727,7 +728,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             /// <summary>
             /// focus: distance from center to focus. other is negative of this
             /// </summary>
-            public double f {  get { return Math.Sqrt(Math.Abs(a * a - b * b)); } }
+            public double f { get { return Math.Sqrt(Math.Abs(a * a - b * b)); } }
             public CEllipse(Point ptTopLeft, Point ptBotRight, Point ptStartArc, Point ptEndArc)
             {
                 this.ptTopLeft = ptTopLeft;
@@ -779,20 +780,42 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         x = (-B - sqt) / (2 * A);
                         ptIntersect1 = new Point(lnIncident.pt0.X, x);
                     }
-                    // now determine which point is in the right direction
+                    // now determine which point is in the right direction 
+                    //(could be both if point started outside ellipse)
                     var ss = Math.Sign(vecLight.X);
                     var s2 = Math.Sign(ptIntersect0.Value.X - ptLight.X);
-                    if (ss * s2 == 1) // in our direction?
+                    if (ss * s2 != 1) // not in our direction?
                     {
-                        ptIntersectResult = ptIntersect0.Value;
+                        ptIntersect0 = null;
+                    }
+                    s2 = Math.Sign(ptIntersect1.Value.X - ptLight.X);
+                    if (ss * s2 != 1) // not in our direction?
+                    {
+                        ptIntersect1 = null;
+                    }
+                    if (ptIntersect0.HasValue)
+                    {
+                        if (ptIntersect1.HasValue)
+                        {// both: choose closest
+                            var dist0 = ptIntersect0.Value.DistanceFromPoint(ptLight);
+                            var dist1 = ptIntersect1.Value.DistanceFromPoint(ptLight);
+                            if (dist0 < dist1)
+                            {
+                                ptIntersectResult = ptIntersect0;
+                            }
+                            else
+                            {
+                                ptIntersectResult = ptIntersect1;
+                            }
+                        }
+                        else
+                        {
+                            ptIntersectResult = ptIntersect0;
+                        }
                     }
                     else
                     {
-                        s2 = Math.Sign(ptIntersect1.Value.X - ptLight.X);
-                        if (ss * s2 == 1) // in our direction?
-                        {
-                            ptIntersectResult = ptIntersect1.Value;
-                        }
+                        ptIntersectResult = ptIntersect1;
                     }
                 }
                 return ptIntersectResult;
@@ -801,9 +824,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             internal Vector Reflect(Point ptLight, Vector vecLight, Point ptIntersect)
             {
                 // calculate the tangent line at that point.
-                var m = b * b * ptIntersect.X / (a*a*ptIntersect.Y);
+                var m = b * b * ptIntersect.X / (a * a * ptIntersect.Y);
                 vecLight.X = SpeedMult;
                 vecLight.Y = m * SpeedMult;
+                // now determine in which direction
+
                 return vecLight;
             }
             public override string ToString()
