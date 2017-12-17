@@ -468,6 +468,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             _ptLight = new Point(mrg * 2, mrg * 2);
             _vecLight = new Vector(10, 10);
             _nOutofBounds = 0;
+            _colorReflection = 0;
             if (!fKeepUserMirrors)
             {
                 lock (this._lstMirrors)
