@@ -34,6 +34,7 @@ namespace Reflect
             InitializeComponent();
             this.Top = 0;
             this.Left = 0;
+            this.Height = 450;
             this.Title = "Reflect";
             //            this.WindowState = WindowState.Maximized;
             this.Loaded += Reflect_Loaded;
@@ -75,10 +76,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             >
             <CheckBox Content=""_Running"" 
                 IsChecked= ""{Binding Path=IsRunning}"" />
-            <CheckBox Content=""ChangeColor"" 
-                IsChecked= ""{Binding Path=ChangeColor}"" />
-            <CheckBox Content=""Add_Ellipse"" 
-                IsChecked= ""{Binding Path=AddEllipse}"" />
             <Button 
                 Name=""btnClear"" 
                 Content=""_Clear"" 
@@ -277,11 +274,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         int _nPenWidth = 1;
         public int nPenWidth { get { return _nPenWidth; } set { _nPenWidth = value; RaisePropChanged(); } }
-        Point InitPt = new Point( 140, 140);
+        Point InitPt = new Point(140, 140);
         Vector InitVec = new Vector(10, 10);
-        public double InitPtX { get { return InitPt.X; } set { InitPt.X = value; RaisePropChanged(); } } 
+        public double InitPtX { get { return InitPt.X; } set { InitPt.X = value; RaisePropChanged(); } }
         public double InitPtY { get { return InitPt.Y; } set { InitPt.Y = value; RaisePropChanged(); } }
-        public double InitDx { get { return InitVec.X; } set { InitVec.X = value;RaisePropChanged(); } }
+        public double InitDx { get { return InitVec.X; } set { InitVec.X = value; RaisePropChanged(); } }
         public double InitDy { get { return InitVec.Y; } set { InitVec.Y = value; RaisePropChanged(); } }
         public bool ChangeColor { get; set; } = true;
         public bool AddEllipse { get; set; } = true;
@@ -636,14 +633,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             if (em.RightButton == MouseButtonState.Pressed)
             {
-                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                var pos = em.GetPosition(this);
+                var x = new Rect(new Size(this.ActualWidth, this.ActualHeight));
+                if (x.Contains(pos))
                 {
-                    _ptLight = em.GetPosition(this);
-                }
-                else
-                {
-                    _fPenModeDrag = !_fPenModeDrag;
-                    _ptOldMouseDown = em.GetPosition(this);
+                    ShowContextMenu(pos);
                 }
             }
             else
@@ -664,6 +658,52 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
             }
             ShowMouseStatus();
+        }
+
+        private void ShowContextMenu(Point pos)
+        {
+            var cm = new ContextMenu();
+            cm.AddMnuItem(
+                $"Set Initial Laser Light to {pos}",
+                "The light has an initial position and dirction. This sets initial position to right click",
+                (o, e) =>
+                {
+                    InitPtX = pos.X;
+                    InitPtY = pos.Y;
+                }
+                );
+            cm.AddMnuItem(
+                "Toggle Drag mode",
+                "You can draw mirrors with the mouse. ",
+                (o, e) =>
+                {
+                    _fPenModeDrag = !_fPenModeDrag;
+                    _ptOldMouseDown = pos;
+                    ShowMouseStatus();
+                }
+                );
+            var mItemAddEllipse = cm.AddMnuItem(
+                "Add Ellipse",
+                "add an ellipse",
+                (o, e) =>
+                {
+                    AddEllipse = !AddEllipse;
+                }
+                );
+            mItemAddEllipse.IsCheckable = true;
+            mItemAddEllipse.IsChecked = AddEllipse;
+            var mitemColors = cm.AddMnuItem(
+                "Change Colors",
+                "The laser color changes automatically",
+                (o, e) =>
+                {
+                    ChangeColor = !ChangeColor;
+                }
+                );
+            mitemColors.IsCheckable = true;
+            mitemColors.IsChecked = ChangeColor;
+            cm.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            cm.IsOpen = true;
         }
 
         internal void DoMouseMove(object om, MouseEventArgs em)
@@ -1134,6 +1174,17 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     }
     static class ExtensionMethods
     {
+        public static MenuItem AddMnuItem(this ContextMenu ctxmenu, string name, string tip, RoutedEventHandler hndlr)
+        {
+            var mitem = new MenuItem()
+            {
+                Header = name,
+                ToolTip = tip
+            };
+            ctxmenu.Items.Add(mitem);
+            mitem.Click += hndlr;
+            return mitem;
+        }
         public static double squared(this double d1)
         {
             return d1 * d1;
