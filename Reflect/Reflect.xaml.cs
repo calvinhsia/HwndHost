@@ -323,32 +323,48 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     this._lstMirrors.Add(new CLine(ptTopLeft, ptBotLeft));
                     if (AddEllipse)
                     {
-                        var distBetweenEllipses = 80;
+                        var distBetweenEllipses = 28;
                         var ellipseTopLeft = new Point(mrg + 10, mrg + 20);
-                        var ellipseBotRight = new Point(newSize.Width - mrg * 2, newSize.Height - distBetweenEllipses);
+                        var ellipseBotRight = new Point(newSize.Width - mrg * 2,
+                            newSize.Height - distBetweenEllipses * 2);
                         var ellipse = new CEllipse(
                             ellipseTopLeft,
                             ellipseBotRight,
                             new Point(0, 0),
                             new Point(0, 0)
                         );
+                        ellipse.ptStartArc = new Point(ellipse.Center.X + ellipse.Width / 2,
+                            ellipse.Center.Y);
+                        ellipse.ptEndArc = new Point(ellipse.Center.X - ellipse.Width / 2,
+                            ellipse.Center.Y);
                         this._lstMirrors.Add(ellipse);
-                        ReflectWindow.AddStatusMessage($"{ellipse}, Center= {ellipse.Center} F1={ellipse.Focus1} F2={ellipse.Focus2}");
-                        DrawPoint(ellipse.Center);
-                        DrawPoint(ellipse.Focus1);
-                        DrawPoint(ellipse.Focus2);
-                        //if (ellipse.a > ellipse.b) // wider
-                        //{
-                        //    _ptLight = new Point(ellipse.Center.X - ellipse.f, ellipse.Center.Y);
-                        //    DrawPoint(_ptLight);
-                        //    DrawPoint(new Point(ellipse.Center.X + ellipse.f, ellipse.Center.Y));
-                        //}
-                        //else
-                        //{
-                        //    _ptLight = new Point(ellipse.Center.X, ellipse.Center.Y + ellipse.f);
-                        //    DrawPoint(_ptLight);
-                        //    DrawPoint(new Point(ellipse.Center.X, ellipse.Center.Y - ellipse.f));
-                        //}
+                        //                        ReflectWindow.AddStatusMessage($"{ellipse}, Center= {ellipse.Center} F1={ellipse.Focus1} F2={ellipse.Focus2}");
+                        ellipseTopLeft.Y += distBetweenEllipses;
+                        ellipseBotRight.Y += distBetweenEllipses;
+                        var el2 = new CEllipse(
+                            ellipseTopLeft,
+                            ellipseBotRight,
+                            new Point(0, 0),
+                            new Point(0, 0)
+                        );
+                        el2.ptStartArc = new Point(el2.Center.X - el2.Width / 2,
+                            el2.Center.Y);
+                        el2.ptEndArc = new Point(el2.Center.X + el2.Width / 2,
+                            el2.Center.Y);
+
+                        this._lstMirrors.Add(el2);
+                        // now joine the 2 halves with straight lines
+                        var lin = new CLine(new Point(ellipse.Center.X - ellipse.Width / 2, ellipse.Center.Y),
+                            new Point(el2.Center.X - el2.Width / 2, el2.Center.Y)
+                            );
+                        this._lstMirrors.Add(lin);
+                        var lin2 = new CLine(new Point(ellipse.Center.X + ellipse.Width / 2, ellipse.Center.Y),
+                            new Point(el2.Center.X + el2.Width / 2, el2.Center.Y)
+                            );
+                        this._lstMirrors.Add(lin2);
+
+
+
                     }
                 }
             }
@@ -389,23 +405,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 //&& nBounces++ < _maxBounces
                 )
             {
-                if (nBounces++ % 1000 == 0 || nDelay > 10)
-                {
-                    int bouncesPerSecond = 0;
-                    if (sw.ElapsedMilliseconds > 0)
-                    {
-                        bouncesPerSecond = (int)(1000 * nBounces / sw.ElapsedMilliseconds);
-                    }
-                    ReflectWindow.AddStatusMessage(
-                        $"# Lines= {_lstMirrors.Count} bounces = {nBounces:n0}" +
-                        $" ({_ptLight.X,8:n1},{_ptLight.Y,8:n1}) ({_vecLight.X,8:n4},{_vecLight.Y,8:n4})" +
-                        $" OOB={_nOutofBounds}" +
-                        $" B/S={bouncesPerSecond}");
-                }
-                if (nDelay > 0)
-                {
-                    Thread.Sleep(nDelay);
-                }
                 // for each line determine the intersection of our light vector incident line, which is just a segment
                 // if it's behind, ignore it
                 var lnIncident = new CLine(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
@@ -448,7 +447,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
                 // now draw incident line from orig pt to intersection
                 NativeMethods.SelectObject(hDC, _clrFillReflection);
-                if (nBounces == 1)
+                if (nBounces == 0)
                 {
                     NativeMethods.MoveToEx(hDC, (int)(xScale * _ptLight.X), (int)(yScale * _ptLight.Y), ref _ptPrev);
                 }
@@ -482,6 +481,25 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 // now set new pt 
                 _ptLight = ptIntersect.Value;
                 SetColor((_colorReflection + 1) & 0xffffff);
+
+                if (nBounces++ % 1000 == 0 || nDelay > 10)
+                {
+                    int bouncesPerSecond = 0;
+                    if (sw.ElapsedMilliseconds > 0)
+                    {
+                        bouncesPerSecond = (int)(1000 * nBounces / sw.ElapsedMilliseconds);
+                    }
+                    ReflectWindow.AddStatusMessage(
+                        $"# Lines= {_lstMirrors.Count} bounces = {nBounces:n0}" +
+                        $" ({_ptLight.X,8:n1},{_ptLight.Y,8:n1}) ({_vecLight.X,8:n4},{_vecLight.Y,8:n4})" +
+                        $" OOB={_nOutofBounds}" +
+                        $" B/S={bouncesPerSecond}");
+                }
+                if (nDelay > 0)
+                {
+                    Thread.Sleep(nDelay);
+                }
+
             }
             NativeMethods.ReleaseDC(_hwnd, hDC);
         }
@@ -688,6 +706,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 (o, e) =>
                 {
                     AddEllipse = !AddEllipse;
+                    DrawMirrors();
                 }
                 );
             mItemAddEllipse.IsCheckable = true;
@@ -804,22 +823,22 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     /// </summary>
     public class CEllipse : IMirror
     {
-        public Point ptTopLeft { get; private set; }
-        public Point ptBotRight { get; private set; }
-        public Point ptStartArc { get; private set; }
-        public Point ptEndArc { get; private set; }
+        public Point ptTopLeft { get; set; }
+        public Point ptBotRight { get; set; }
+        public Point ptStartArc { get; set; }
+        public Point ptEndArc { get; set; }
         public double Width { get { return ptBotRight.X - ptTopLeft.X; } }
         public double Height { get { return ptBotRight.Y - ptTopLeft.Y; } }
         public double a { get { return Width / 2; } }
         public double b { get { return Height / 2; } }
 
         public Point Center { get { return new Point(ptTopLeft.X + Width / 2, ptTopLeft.Y + Height / 2); } }
-        public double d1 { get { return Center.X; } }
         public double d2 { get { return Center.Y; } }
         /// <summary>
         /// focus: distance from center to focus. other is negative of this
         /// </summary>
         public double f { get { return Math.Sqrt(Math.Abs(a * a - b * b)); } }
+        private Point? _ptonArc;
         public Point Focus1
         {
             get
@@ -849,6 +868,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             this.ptStartArc = ptStartArc;
             this.ptEndArc = ptEndArc;
         }
+
+        bool IsCompleteEllipse { get { return ptStartArc == ptEndArc; } }
         // https://social.msdn.microsoft.com/Forums/windowsapps/en-US/b599db66-a987-4dba-b5b9-7babc9badc9c/finding-the-intersection-points-of-a-line-and-an-ellipse?forum=wpdevelop
         public bool IsPointInside(Point pt)
         {
@@ -873,13 +894,13 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 m = lnIncident.slope;
                 c = lnIncident.YIntercept;
                 A = b * b + a * a * m * m;
-                B = 2 * a * a * m * (c - d2) - 2 * b * b * d1;
-                C = b * b * d1 * d1 + a * a * ((c - d2) * (c - d2) - b * b);
+                B = 2 * a * a * m * (c - Center.Y) - 2 * b * b * Center.X;
+                C = b * b * Center.X * Center.X + a * a * ((c - Center.Y) * (c - Center.Y) - b * b);
             }
             else
             {
                 A = a * a;
-                B = -2 * d2 * a * a;
+                B = -2 * Center.Y * a * a;
                 C = -a * a * b * b + b * b * (lnIncident.pt0.X - Center.X) * (lnIncident.pt0.X - Center.X);
             }
             // quadratic formula (-b +- sqrt(b*b-4ac)/2a
@@ -902,39 +923,113 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     //ptIntersect0 = new Point(lnIncident.pt0.X, x);
                     //x = (-B - sqt) / (2 * A);
                     //ptIntersect1 = new Point(lnIncident.pt0.X, x);
-                    var y = (b / a) * Math.Sqrt(a.squared() - (ptLight.X - d1).squared()) + d2;
-                    var y2 = -(b / a) * Math.Sqrt(a.squared() - (ptLight.X - d1).squared()) + d2;
+                    var y = (b / a) * Math.Sqrt(a.squared() - (ptLight.X - Center.X).squared()) + Center.Y;
+                    var y2 = -(b / a) * Math.Sqrt(a.squared() - (ptLight.X - Center.X).squared()) + Center.Y;
                     ptIntersect0 = new Point(ptLight.X, y);
                     ptIntersect1 = new Point(ptLight.X, y2);
                 }
                 // we have 2 pts: choose which one
+                if (!IsCompleteEllipse)
+                {
+                    if (!IsPointOnArc(ptIntersect0.Value))
+                    {
+                        ptIntersect0 = null;
+                    }
+                    if (!IsPointOnArc(ptIntersect1.Value))
+                    {
+                        ptIntersect1 = null;
+                    }
+                }
                 //BounceFrame._instance.DrawPoint(ptIntersect0.Value);
                 //BounceFrame._instance.DrawPoint(ptIntersect1.Value);
                 ////is one of the 2 intersections where the light came from?
-                if (ptIntersect0.Value.DistanceFromPoint(ptLight) < 1)
+                if (ptIntersect0.HasValue && ptIntersect0.Value.DistanceFromPoint(ptLight) < 1)
                 {
-                    ptIntersectResult = ptIntersect1;
+                    ptIntersect0 = null;
                 }
-                if (ptIntersect1.Value.DistanceFromPoint(ptLight) < 1)
+                if (ptIntersect1.HasValue && ptIntersect1.Value.DistanceFromPoint(ptLight) < 1)
+                {
+                    ptIntersect1 = null;
+                }
+                // now determine which point is in the right direction 
+                //(could be both if point started outside ellipse)
+                if (ptIntersect0.HasValue && 
+                    !ptIntersect0.Value.IsVectorInSameDirection(ptLight, vecLight))
+                {
+                    ptIntersect0 = null;
+                }
+                if (ptIntersect1.HasValue &&
+                    !ptIntersect1.Value.IsVectorInSameDirection(ptLight, vecLight))
+                {
+                    ptIntersect1 = null;
+                }
+                if (ptIntersect0.HasValue)
                 {
                     ptIntersectResult = ptIntersect0;
                 }
-                if (!ptIntersectResult.HasValue)
+                else
                 {
-                    // now determine which point is in the right direction 
-                    //(could be both if point started outside ellipse)
-                    if (ptIntersect0.Value.IsVectorInSameDirection(ptLight, vecLight))
-                    {
-                        ptIntersectResult = ptIntersect0;
-                    }
-                    else
-                    {
-                        ptIntersectResult = ptIntersect1;
-                    }
+                    ptIntersectResult = ptIntersect1;
                 }
             }
+            //if (!IsCompleteEllipse && ptIntersectResult.HasValue)
+            //{
+            //    //BounceFrame._instance.DrawPoint(ptIntersectResult.Value);
+            //    // imagine a straight line between the arc start and arc end pts on the ellipse
+            //    // get a point on the arc.
+            //    // the intpoint is either in the same half plane or not as the arcpt
+            //    var lnArcStartEnd = new CLine(ptStartArc, ptEndArc);
+            //    var isLeft = lnArcStartEnd.LeftHalf(ptIntersectResult.Value);
+            //    var ptArc = GetPointOnArc();
+            //    var isPtOnArcLeft = lnArcStartEnd.LeftHalf(ptArc);
+            //    if (isLeft ^ isPtOnArcLeft)
+            //    {
+            //        ptIntersectResult = null;
+            //    }
+            //}
             return ptIntersectResult;
         }
+
+        bool IsPointOnArc(Point pt)
+        {
+            var result = false;
+            if (IsCompleteEllipse)
+            {
+                result = true;
+            }
+            else
+            {
+                //BounceFrame._instance.DrawPoint(pt);
+                // imagine a straight line between the arc start and arc end pts on the ellipse
+                // the intpoint is either in the same half plane or not as the arcpt
+                var lnArcStartEnd = new CLine(ptStartArc, ptEndArc);
+                var isLeft = lnArcStartEnd.LeftHalf(pt);
+                var ptArc = GetPointOnArc();
+                var isPtOnArcLeft = lnArcStartEnd.LeftHalf(ptArc);
+                if (isLeft == isPtOnArcLeft)
+                {
+                    result = true;
+                }
+            }
+            return result;
+        }
+        private Point GetPointOnArc()
+        {
+            if (!_ptonArc.HasValue)
+            {
+                // default direction of arc is counter clockwise.
+                if (ptStartArc.X > ptEndArc.X)
+                {
+                    _ptonArc = new Point(ptStartArc.X - 1, ptStartArc.Y - 1);
+                }
+                else
+                {
+                    _ptonArc = new Point(ptStartArc.X + 1, ptStartArc.Y + 1);
+                }
+            }
+            return _ptonArc.Value;
+        }
+
         public Vector Reflect(Point ptLight, Vector vecLight, Point ptIntersect)
         {
             // calculate the slope of the tangent line at that point by differentiation
@@ -970,10 +1065,13 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             //    (int)(xScale * this.ptBotRight.X), (int)(yScale * this.ptBotRight.Y),
             //    (int)(xScale * (this.ptTopLeft.X + this.Width)), (int)(yScale * (this.ptTopLeft.Y + this.Height / 2)),
             //    (int)(xScale * (this.ptTopLeft.X)), (int)(yScale * (this.ptTopLeft.Y + this.Height / 2)));
+            BounceFrame._instance.DrawPoint(this.Center);
+            BounceFrame._instance.DrawPoint(this.Focus1);
+            BounceFrame._instance.DrawPoint(this.Focus2);
         }
         public override string ToString()
         {
-            return $"EL{ptTopLeft}--{ptBotRight}";
+            return $"EL({ptTopLeft})-({ptBotRight})";
         }
     }
 
@@ -1054,9 +1152,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         /// <returns></returns>
         public bool LeftHalf(Point c)
         {
-            var a = pt0;
-            var b = pt1;
-            var res = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+            var res = (pt1.X - pt0.X) * (c.Y - pt0.Y) - (pt1.Y - pt0.Y) * (c.X - pt0.X);
             return res > 0;
         }
 
@@ -1252,5 +1348,15 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
           int nXEndArc,
           int nYEndArc
         );
+        // c:\Program Files (x86)\Windows Kits\8.1\Include\um\wingdi.h
+        public enum _ArcDirection
+        {
+            AD_COUNTERCLOCKWISE = 1,
+            AD_CLOCKWISE = 2
+        }
+        [DllImport("gdi32")]
+        public static extern _ArcDirection GetArcDirection(IntPtr hdc);
+        [DllImport("gdi32")]
+        public static extern int SetArcDirection(IntPtr hdc, _ArcDirection ArcDirection);
     }
 }
