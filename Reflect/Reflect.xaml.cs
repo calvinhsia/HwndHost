@@ -139,7 +139,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     Text =""{Binding Path=InitDy}"" 
                     Width=""50""
                     ToolTip=""Initial Laser y direction"" />
-
+                <Label Content=""ElDist""/>
+                <l:MyTextBox 
+                    Text =""{Binding Path=distBetweenEllipses}"" 
+                    Width=""50""
+                    ToolTip=""Distance between 2 ellipse halves"" />
         </StackPanel>
         <UserControl Name=""MyUserControl"" Grid.Column=""1""></UserControl>
     </Grid>
@@ -282,6 +286,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public double InitDy { get { return InitVec.Y; } set { InitVec.Y = value; RaisePropChanged(); } }
         public bool ChangeColor { get; set; } = true;
         public bool AddEllipse { get; set; } = true;
+        public double distBetweenEllipses { get; set; } = 66;
+        public bool ShowEllipsePts { get; set; }
 
         bool _isRunning;
         internal static BounceFrame _instance;
@@ -301,7 +307,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             var newSize = new Size(this.ActualWidth, this.ActualHeight);
 
             this.EraseRect();
-            var mrg = 8;
+            var mrg = 18;
             var ptTopLeft = new Point(mrg, mrg);
             var ptTopRight = new Point(newSize.Width - 1 - mrg, mrg);
             var ptBotLeft = new Point(mrg, newSize.Height - 1 - mrg);
@@ -323,7 +329,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     this._lstMirrors.Add(new CLine(ptTopLeft, ptBotLeft));
                     if (AddEllipse)
                     {
-                        var distBetweenEllipses = 28;
                         var ellipseTopLeft = new Point(mrg + 10, mrg + 20);
                         var ellipseBotRight = new Point(newSize.Width - mrg * 2,
                             newSize.Height - distBetweenEllipses * 2);
@@ -353,17 +358,97 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             el2.Center.Y);
 
                         this._lstMirrors.Add(el2);
-                        // now joine the 2 halves with straight lines
-                        var lin = new CLine(new Point(ellipse.Center.X - ellipse.Width / 2, ellipse.Center.Y),
-                            new Point(el2.Center.X - el2.Width / 2, el2.Center.Y)
+                        // now add the line segments
+                        var dGapHeight = 35;
+                        var dGapWidth = 25;
+                        var segLenVert = (distBetweenEllipses - dGapHeight) / 2;
+                        // upper ellipse vert down
+                        var pt0 = new Point(ellipse.Center.X - ellipse.Width / 2,
+                                ellipse.Center.Y);
+                        var pt1 = new Point(pt0.X,
+                                ellipse.Center.Y + segLenVert);
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // horiz across
+                        pt0 = pt1;
+                        pt1.X += dGapWidth;
+                        pt1.Y = pt0.Y;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // upper ellipse vert up
+                        pt0 = pt1;
+                        pt1 = pt0;
+                        pt1.Y = pt0.Y - segLenVert;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // left inner ellipse
+                        pt0 = pt1;
+                        var elInnerWidth = 33;
+                        var elLeftInner = new CEllipse(
+                            new Point(pt0.X - elInnerWidth / 2, pt0.Y),
+                            new Point(pt0.X + elInnerWidth / 2, pt0.Y + distBetweenEllipses),
+                            new Point(pt0.X, pt0.Y + distBetweenEllipses),
+                            new Point(pt0.X, pt0.Y)
                             );
-                        this._lstMirrors.Add(lin);
-                        var lin2 = new CLine(new Point(ellipse.Center.X + ellipse.Width / 2, ellipse.Center.Y),
-                            new Point(el2.Center.X + el2.Width / 2, el2.Center.Y)
+                        this._lstMirrors.Add(elLeftInner);
+                        // lower vert up
+                        pt0.Y += distBetweenEllipses;
+                        pt1 = pt0;
+                        pt1.Y -= segLenVert;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // lower horiz left
+                        pt0 = pt1;
+                        pt1.X -= dGapWidth;
+                        pt1.Y = pt0.Y;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // lower left vert
+                        pt0 = pt1;
+                        pt1.Y += segLenVert;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // right side: vert down
+                        pt0.X = ellipse.Center.X + ellipse.Width / 2;
+                        pt0.Y = ellipse.Center.Y;
+                        pt1 = pt0;
+                        pt1.Y += segLenVert;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // horiz to left
+                        pt0 = pt1;
+                        pt1.X -= dGapWidth;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // vert up
+                        pt0 = pt1;
+                        pt1.Y -= segLenVert;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // right inner ellipse
+                        pt0 = pt1;
+                        var elRightInner = new CEllipse(
+                            new Point(pt0.X - elInnerWidth / 2, pt0.Y),
+                            new Point(pt0.X + elInnerWidth / 2, pt0.Y + distBetweenEllipses),
+                            new Point(pt0.X, pt0.Y),
+                            new Point(pt0.X, pt0.Y + distBetweenEllipses)
                             );
-                        this._lstMirrors.Add(lin2);
-
-
+                        this._lstMirrors.Add(elRightInner);
+                        // right side left: vert up
+                        pt0.Y += distBetweenEllipses;
+                        pt1 = pt0;
+                        pt1.Y -= segLenVert;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // right side horiz
+                        pt0 = pt1;
+                        pt1 = pt0;
+                        pt1.X += dGapWidth;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // right side right lower vert
+                        pt0 = pt1;
+                        pt1 = pt0;
+                        pt1.Y += segLenVert;
+                        this._lstMirrors.Add(new CLine(pt0, pt1));
+                        // now join the 2 halves with straight lines
+                        //var lin = new CLine(new Point(ellipse.Center.X - ellipse.Width / 2, ellipse.Center.Y),
+                        //    new Point(el2.Center.X - el2.Width / 2, el2.Center.Y)
+                        //    );
+                        //this._lstMirrors.Add(lin);
+                        //var lin2 = new CLine(new Point(ellipse.Center.X + ellipse.Width / 2, ellipse.Center.Y),
+                        //    new Point(el2.Center.X + el2.Width / 2, el2.Center.Y)
+                        //    );
+                        //this._lstMirrors.Add(lin2);
 
                     }
                 }
@@ -540,7 +625,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 RaisePropChanged();
             }
         }
-
         void EnsureCancelled()
         {
             while (_tskDrawing != null && !(_tskDrawing.IsCanceled || _tskDrawing.IsCompleted))
@@ -706,7 +790,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 (o, e) =>
                 {
                     AddEllipse = !AddEllipse;
-                    DrawMirrors();
+                    Clear(fKeepUserMirrors: false);
                 }
                 );
             mItemAddEllipse.IsCheckable = true;
@@ -721,6 +805,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 );
             mitemColors.IsCheckable = true;
             mitemColors.IsChecked = ChangeColor;
+            var mitemShowEllipsePts = cm.AddMnuItem(
+                "ShowEllipsePts",
+                "Show Center and 2 foci of ellipse",
+                (o, e) =>
+                {
+                    ShowEllipsePts = !ShowEllipsePts;
+                    Clear(fKeepUserMirrors: true);
+                }
+                );
+            mitemShowEllipsePts.IsCheckable = true;
+            mitemShowEllipsePts.IsCheckable = ShowEllipsePts;
+
             cm.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
             cm.IsOpen = true;
         }
@@ -887,7 +983,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             Point? ptIntersect0 = null;
             Point? ptIntersect1 = null;
             var lnIncident = new CLine(ptLight, new Point(ptLight.X + vecLight.X, ptLight.Y + vecLight.Y));
-            //BounceFrame._instance.DrawLine(lnIncident);
             double A = 0, B = 0, C = 0, m = 0, c = 0;
             if (vecLight.X != 0) // nonVertical
             {
@@ -929,6 +1024,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     ptIntersect1 = new Point(ptLight.X, y2);
                 }
                 // we have 2 pts: choose which one
+                //BounceFrame._instance.DrawLine(lnIncident);
+                //BounceFrame._instance.DrawPoint(ptIntersect0.Value);
+                //BounceFrame._instance.DrawPoint(ptIntersect1.Value);
                 if (!IsCompleteEllipse)
                 {
                     if (!IsPointOnArc(ptIntersect0.Value))
@@ -940,8 +1038,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         ptIntersect1 = null;
                     }
                 }
-                //BounceFrame._instance.DrawPoint(ptIntersect0.Value);
-                //BounceFrame._instance.DrawPoint(ptIntersect1.Value);
                 ////is one of the 2 intersections where the light came from?
                 if (ptIntersect0.HasValue && ptIntersect0.Value.DistanceFromPoint(ptLight) < 1)
                 {
@@ -953,7 +1049,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
                 // now determine which point is in the right direction 
                 //(could be both if point started outside ellipse)
-                if (ptIntersect0.HasValue && 
+                if (ptIntersect0.HasValue &&
                     !ptIntersect0.Value.IsVectorInSameDirection(ptLight, vecLight))
                 {
                     ptIntersect0 = null;
@@ -965,28 +1061,30 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
                 if (ptIntersect0.HasValue)
                 {
-                    ptIntersectResult = ptIntersect0;
+                    if (ptIntersect1.HasValue)// 2 pts still: choose closer
+                    {
+                        var dist0 = ptLight.DistanceFromPoint(ptIntersect0.Value);
+                        var dist1 = ptLight.DistanceFromPoint(ptIntersect1.Value);
+                        if (dist0 < dist1)
+                        {
+                            ptIntersectResult = ptIntersect0;
+                        }
+                        else
+                        {
+                            ptIntersectResult = ptIntersect1;
+                        }
+
+                    }
+                    else
+                    {
+                        ptIntersectResult = ptIntersect0;
+                    }
                 }
                 else
                 {
                     ptIntersectResult = ptIntersect1;
                 }
             }
-            //if (!IsCompleteEllipse && ptIntersectResult.HasValue)
-            //{
-            //    //BounceFrame._instance.DrawPoint(ptIntersectResult.Value);
-            //    // imagine a straight line between the arc start and arc end pts on the ellipse
-            //    // get a point on the arc.
-            //    // the intpoint is either in the same half plane or not as the arcpt
-            //    var lnArcStartEnd = new CLine(ptStartArc, ptEndArc);
-            //    var isLeft = lnArcStartEnd.LeftHalf(ptIntersectResult.Value);
-            //    var ptArc = GetPointOnArc();
-            //    var isPtOnArcLeft = lnArcStartEnd.LeftHalf(ptArc);
-            //    if (isLeft ^ isPtOnArcLeft)
-            //    {
-            //        ptIntersectResult = null;
-            //    }
-            //}
             return ptIntersectResult;
         }
 
@@ -1013,6 +1111,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
             return result;
         }
+        /// <summary>
+        /// To determine if a point is included in the arc of an ellipse
+        /// imagine a line from the start and end arc pts. 
+        /// Get a point in the half plane that includes the arc
+        /// </summary>
         private Point GetPointOnArc()
         {
             if (!_ptonArc.HasValue)
@@ -1024,7 +1127,21 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
                 else
                 {
-                    _ptonArc = new Point(ptStartArc.X + 1, ptStartArc.Y + 1);
+                    if (ptStartArc.X == ptEndArc.X)
+                    {
+                        if (ptStartArc.Y > ptEndArc.Y)
+                        {
+                            _ptonArc = new Point(ptStartArc.X + 1, ptStartArc.Y - 1);
+                        }
+                        else
+                        {
+                            _ptonArc = new Point(ptStartArc.X - 1, ptStartArc.Y - 1);
+                        }
+                    }
+                    else
+                    {
+                        _ptonArc = new Point(ptStartArc.X + 1, ptStartArc.Y + 1);
+                    }
                 }
             }
             return _ptonArc.Value;
@@ -1065,9 +1182,12 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             //    (int)(xScale * this.ptBotRight.X), (int)(yScale * this.ptBotRight.Y),
             //    (int)(xScale * (this.ptTopLeft.X + this.Width)), (int)(yScale * (this.ptTopLeft.Y + this.Height / 2)),
             //    (int)(xScale * (this.ptTopLeft.X)), (int)(yScale * (this.ptTopLeft.Y + this.Height / 2)));
-            BounceFrame._instance.DrawPoint(this.Center);
-            BounceFrame._instance.DrawPoint(this.Focus1);
-            BounceFrame._instance.DrawPoint(this.Focus2);
+            if (BounceFrame._instance.ShowEllipsePts)
+            {
+                BounceFrame._instance.DrawPoint(this.Center);
+                BounceFrame._instance.DrawPoint(this.Focus1);
+                BounceFrame._instance.DrawPoint(this.Focus2);
+            }
         }
         public override string ToString()
         {
