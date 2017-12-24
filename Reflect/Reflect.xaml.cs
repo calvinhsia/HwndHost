@@ -286,7 +286,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public double InitDy { get { return InitVec.Y; } set { InitVec.Y = value; RaisePropChanged(); } }
         public bool ChangeColor { get; set; } = true;
         public bool AddEllipse { get; set; } = true;
-        public double distBetweenEllipses { get; set; } = 66;
+        public double distBetweenEllipses { get; set; } = 85;
         public bool ShowEllipsePts { get; set; }
 
         bool _isRunning;
@@ -359,8 +359,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
                         this._lstMirrors.Add(el2);
                         // now add the line segments
-                        var dGapHeight = 35;
-                        var dGapWidth = 25;
+                        var dGapHeight = 20;
+                        var dGapWidth = 20;
+                        var elInnerWidth = 43;
                         var segLenVert = (distBetweenEllipses - dGapHeight) / 2;
                         // upper ellipse vert down
                         var pt0 = new Point(ellipse.Center.X - ellipse.Width / 2,
@@ -380,7 +381,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         this._lstMirrors.Add(new CLine(pt0, pt1));
                         // left inner ellipse
                         pt0 = pt1;
-                        var elInnerWidth = 33;
                         var elLeftInner = new CEllipse(
                             new Point(pt0.X - elInnerWidth / 2, pt0.Y),
                             new Point(pt0.X + elInnerWidth / 2, pt0.Y + distBetweenEllipses),
