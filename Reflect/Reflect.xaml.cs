@@ -286,6 +286,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public double InitDy { get { return InitVec.Y; } set { InitVec.Y = value; RaisePropChanged(); } }
         public bool ChangeColor { get; set; } = true;
         public bool AddEllipse { get; set; } = true;
+
+        public bool AddMushrooms { get; set; } = true;
+
         public double distBetweenEllipses { get; set; } = 85;
         public bool ShowEllipsePts { get; set; }
 
@@ -327,7 +330,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     this._lstMirrors.Add(new CLine(ptTopRight, ptBotRight));
                     this._lstMirrors.Add(new CLine(ptBotRight, ptBotLeft));
                     this._lstMirrors.Add(new CLine(ptTopLeft, ptBotLeft));
-                    if (AddEllipse)
+                    if (AddEllipse || AddMushrooms)
                     {
                         var ellipseTopLeft = new Point(mrg + 10, mrg + 20);
                         var ellipseBotRight = new Point(newSize.Width - mrg * 2,
@@ -338,118 +341,120 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             new Point(0, 0),
                             new Point(0, 0)
                         );
-                        ellipse.ptStartArc = new Point(ellipse.Center.X + ellipse.Width / 2,
-                            ellipse.Center.Y);
-                        ellipse.ptEndArc = new Point(ellipse.Center.X - ellipse.Width / 2,
-                            ellipse.Center.Y);
                         this._lstMirrors.Add(ellipse);
-                        //                        ReflectWindow.AddStatusMessage($"{ellipse}, Center= {ellipse.Center} F1={ellipse.Focus1} F2={ellipse.Focus2}");
-                        ellipseTopLeft.Y += distBetweenEllipses;
-                        ellipseBotRight.Y += distBetweenEllipses;
-                        var el2 = new CEllipse(
-                            ellipseTopLeft,
-                            ellipseBotRight,
-                            new Point(0, 0),
-                            new Point(0, 0)
-                        );
-                        el2.ptStartArc = new Point(el2.Center.X - el2.Width / 2,
-                            el2.Center.Y);
-                        el2.ptEndArc = new Point(el2.Center.X + el2.Width / 2,
-                            el2.Center.Y);
-
-                        this._lstMirrors.Add(el2);
-                        // now add the line segments
-                        var dGapHeight = 20;
-                        var dGapWidth = 20;
-                        var elInnerWidth = 43;
-                        var segLenVert = (distBetweenEllipses - dGapHeight) / 2;
-                        // upper ellipse vert down
-                        var pt0 = new Point(ellipse.Center.X - ellipse.Width / 2,
+                        if (AddMushrooms)
+                        {
+                            ellipse.ptStartArc = new Point(ellipse.Center.X + ellipse.Width / 2,
                                 ellipse.Center.Y);
-                        var pt1 = new Point(pt0.X,
-                                ellipse.Center.Y + segLenVert);
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // horiz across
-                        pt0 = pt1;
-                        pt1.X += dGapWidth;
-                        pt1.Y = pt0.Y;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // upper ellipse vert up
-                        pt0 = pt1;
-                        pt1 = pt0;
-                        pt1.Y = pt0.Y - segLenVert;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // left inner ellipse
-                        pt0 = pt1;
-                        var elLeftInner = new CEllipse(
-                            new Point(pt0.X - elInnerWidth / 2, pt0.Y),
-                            new Point(pt0.X + elInnerWidth / 2, pt0.Y + distBetweenEllipses),
-                            new Point(pt0.X, pt0.Y + distBetweenEllipses),
-                            new Point(pt0.X, pt0.Y)
+                            ellipse.ptEndArc = new Point(ellipse.Center.X - ellipse.Width / 2,
+                                ellipse.Center.Y);
+                            //                        ReflectWindow.AddStatusMessage($"{ellipse}, Center= {ellipse.Center} F1={ellipse.Focus1} F2={ellipse.Focus2}");
+                            ellipseTopLeft.Y += distBetweenEllipses;
+                            ellipseBotRight.Y += distBetweenEllipses;
+                            var el2 = new CEllipse(
+                                ellipseTopLeft,
+                                ellipseBotRight,
+                                new Point(0, 0),
+                                new Point(0, 0)
                             );
-                        this._lstMirrors.Add(elLeftInner);
-                        // lower vert up
-                        pt0.Y += distBetweenEllipses;
-                        pt1 = pt0;
-                        pt1.Y -= segLenVert;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // lower horiz left
-                        pt0 = pt1;
-                        pt1.X -= dGapWidth;
-                        pt1.Y = pt0.Y;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // lower left vert
-                        pt0 = pt1;
-                        pt1.Y += segLenVert;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // right side: vert down
-                        pt0.X = ellipse.Center.X + ellipse.Width / 2;
-                        pt0.Y = ellipse.Center.Y;
-                        pt1 = pt0;
-                        pt1.Y += segLenVert;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // horiz to left
-                        pt0 = pt1;
-                        pt1.X -= dGapWidth;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // vert up
-                        pt0 = pt1;
-                        pt1.Y -= segLenVert;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // right inner ellipse
-                        pt0 = pt1;
-                        var elRightInner = new CEllipse(
-                            new Point(pt0.X - elInnerWidth / 2, pt0.Y),
-                            new Point(pt0.X + elInnerWidth / 2, pt0.Y + distBetweenEllipses),
-                            new Point(pt0.X, pt0.Y),
-                            new Point(pt0.X, pt0.Y + distBetweenEllipses)
-                            );
-                        this._lstMirrors.Add(elRightInner);
-                        // right side left: vert up
-                        pt0.Y += distBetweenEllipses;
-                        pt1 = pt0;
-                        pt1.Y -= segLenVert;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // right side horiz
-                        pt0 = pt1;
-                        pt1 = pt0;
-                        pt1.X += dGapWidth;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // right side right lower vert
-                        pt0 = pt1;
-                        pt1 = pt0;
-                        pt1.Y += segLenVert;
-                        this._lstMirrors.Add(new CLine(pt0, pt1));
-                        // now join the 2 halves with straight lines
-                        //var lin = new CLine(new Point(ellipse.Center.X - ellipse.Width / 2, ellipse.Center.Y),
-                        //    new Point(el2.Center.X - el2.Width / 2, el2.Center.Y)
-                        //    );
-                        //this._lstMirrors.Add(lin);
-                        //var lin2 = new CLine(new Point(ellipse.Center.X + ellipse.Width / 2, ellipse.Center.Y),
-                        //    new Point(el2.Center.X + el2.Width / 2, el2.Center.Y)
-                        //    );
-                        //this._lstMirrors.Add(lin2);
+                            el2.ptStartArc = new Point(el2.Center.X - el2.Width / 2,
+                                el2.Center.Y);
+                            el2.ptEndArc = new Point(el2.Center.X + el2.Width / 2,
+                                el2.Center.Y);
 
+                            this._lstMirrors.Add(el2);
+                            // now add the line segments
+                            var dGapHeight = 20;
+                            var dGapWidth = 20;
+                            var elInnerWidth = 43;
+                            var segLenVert = (distBetweenEllipses - dGapHeight) / 2;
+                            // upper ellipse vert down
+                            var pt0 = new Point(ellipse.Center.X - ellipse.Width / 2,
+                                    ellipse.Center.Y);
+                            var pt1 = new Point(pt0.X,
+                                    ellipse.Center.Y + segLenVert);
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // horiz across
+                            pt0 = pt1;
+                            pt1.X += dGapWidth;
+                            pt1.Y = pt0.Y;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // upper ellipse vert up
+                            pt0 = pt1;
+                            pt1 = pt0;
+                            pt1.Y = pt0.Y - segLenVert;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // left inner ellipse
+                            pt0 = pt1;
+                            var elLeftInner = new CEllipse(
+                                new Point(pt0.X - elInnerWidth / 2, pt0.Y),
+                                new Point(pt0.X + elInnerWidth / 2, pt0.Y + distBetweenEllipses),
+                                new Point(pt0.X, pt0.Y + distBetweenEllipses),
+                                new Point(pt0.X, pt0.Y)
+                                );
+                            this._lstMirrors.Add(elLeftInner);
+                            // lower vert up
+                            pt0.Y += distBetweenEllipses;
+                            pt1 = pt0;
+                            pt1.Y -= segLenVert;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // lower horiz left
+                            pt0 = pt1;
+                            pt1.X -= dGapWidth;
+                            pt1.Y = pt0.Y;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // lower left vert
+                            pt0 = pt1;
+                            pt1.Y += segLenVert;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // right side: vert down
+                            pt0.X = ellipse.Center.X + ellipse.Width / 2;
+                            pt0.Y = ellipse.Center.Y;
+                            pt1 = pt0;
+                            pt1.Y += segLenVert;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // horiz to left
+                            pt0 = pt1;
+                            pt1.X -= dGapWidth;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // vert up
+                            pt0 = pt1;
+                            pt1.Y -= segLenVert;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // right inner ellipse
+                            pt0 = pt1;
+                            var elRightInner = new CEllipse(
+                                new Point(pt0.X - elInnerWidth / 2, pt0.Y),
+                                new Point(pt0.X + elInnerWidth / 2, pt0.Y + distBetweenEllipses),
+                                new Point(pt0.X, pt0.Y),
+                                new Point(pt0.X, pt0.Y + distBetweenEllipses)
+                                );
+                            this._lstMirrors.Add(elRightInner);
+                            // right side left: vert up
+                            pt0.Y += distBetweenEllipses;
+                            pt1 = pt0;
+                            pt1.Y -= segLenVert;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // right side horiz
+                            pt0 = pt1;
+                            pt1 = pt0;
+                            pt1.X += dGapWidth;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // right side right lower vert
+                            pt0 = pt1;
+                            pt1 = pt0;
+                            pt1.Y += segLenVert;
+                            this._lstMirrors.Add(new CLine(pt0, pt1));
+                            // now join the 2 halves with straight lines
+                            //var lin = new CLine(new Point(ellipse.Center.X - ellipse.Width / 2, ellipse.Center.Y),
+                            //    new Point(el2.Center.X - el2.Width / 2, el2.Center.Y)
+                            //    );
+                            //this._lstMirrors.Add(lin);
+                            //var lin2 = new CLine(new Point(ellipse.Center.X + ellipse.Width / 2, ellipse.Center.Y),
+                            //    new Point(el2.Center.X + el2.Width / 2, el2.Center.Y)
+                            //    );
+                            //this._lstMirrors.Add(lin2);
+                        }
                     }
                 }
             }
@@ -548,6 +553,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     if (!ellipse.IsPointInside(ptIntersect.Value))
                     {
                         "point not in ellipse".ToString();
+                        //this.EraseRect();
+                        //this.DrawMirrors();
                         //BounceFrame._instance.DrawLine(lnIncident);
                         //var pp = ellipse.IntersectingPoint(_ptLight, _vecLight);
                         //if (pp.HasValue)
@@ -575,7 +582,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         bouncesPerSecond = (int)(1000 * nBounces / sw.ElapsedMilliseconds);
                     }
                     ReflectWindow.AddStatusMessage(
-                        $"# Lines= {_lstMirrors.Count} bounces = {nBounces:n0}" +
+                        $"# Mirrors= {_lstMirrors.Count} bounces = {nBounces:n0}" +
                         $" ({_ptLight.X,8:n1},{_ptLight.Y,8:n1}) ({_vecLight.X,8:n4},{_vecLight.Y,8:n4})" +
                         $" OOB={_nOutofBounds}" +
                         $" B/S={bouncesPerSecond}");
@@ -766,7 +773,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             var cm = new ContextMenu();
             cm.AddMnuItem(
-                $"Set Initial Laser Light to {pos}",
+                $"_Set Initial Laser Light to {pos}",
                 "The light has an initial position and dirction. This sets initial position to right click",
                 (o, e) =>
                 {
@@ -795,6 +802,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 );
             mItemAddEllipse.IsCheckable = true;
             mItemAddEllipse.IsChecked = AddEllipse;
+            var mItemAddMushrooms = cm.AddMnuItem(
+                "Add Mushrooms",
+                "add mushrooms",
+                (o, e) =>
+                {
+                    AddMushrooms = !AddMushrooms;
+                    Clear(fKeepUserMirrors: false);
+                }
+                );
+            mItemAddMushrooms.IsCheckable = true;
+            mItemAddMushrooms.IsChecked = AddMushrooms;
+
             var mitemColors = cm.AddMnuItem(
                 "Change Colors",
                 "The laser color changes automatically",
