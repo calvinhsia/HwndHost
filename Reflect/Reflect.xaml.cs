@@ -200,32 +200,21 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     bounceFrame.Clear(fKeepUserMirrors: false);
                 };
                 var btnDelayUp = (Button)grid.FindName("DelayUp");
-                Func<int> CalcDelayInc = () =>
-                  {
-                      var inc = 1;
-                      if (bounceFrame.nDelay > 0)
-                      {
-                          //inc = (int)Math.Pow(10, (int)Math.Log10(bounceFrame.nDelay) - 1); // logarithmic
-                          inc = (int)(.5 * bounceFrame.nDelay); // 50%
-                          if (inc == 0)
-                          {
-                              inc = 1;
-                          }
-                      }
-                      return inc;
-                  };
                 btnDelayUp.Click += (ob, eb) =>
-                 {
-                     bounceFrame.nDelay += CalcDelayInc();
-                 };
+                {
+                    if (bounceFrame.nDelay == 0)
+                    {
+                        bounceFrame.nDelay = 1;
+                    }
+                    else
+                    {
+                        bounceFrame.nDelay *= 8;
+                    }
+                };
                 var btnDelayDn = (Button)grid.FindName("DelayDn");
                 btnDelayDn.Click += (ob, eb) =>
                 {
-                    bounceFrame.nDelay -= CalcDelayInc();
-                    if (bounceFrame.nDelay < 0)
-                    {
-                        bounceFrame.nDelay = 0;
-                    }
+                    bounceFrame.nDelay /= 8;
                 };
                 var userCtrl = (UserControl)grid.FindName("MyUserControl");
                 userCtrl.Content = bounceFrame;
@@ -351,6 +340,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             new Point(0, 0),
                             new Point(0, 0)
                         );
+
+                        InitPt.X = ellipse.Center.X;
+                        InitPt.Y = ellipse.Center.Y - (ellipse.Height / 2 - 10);
+
                         this._lstMirrors.Add(ellipse);
                         if (AddMushrooms)
                         {
@@ -510,7 +503,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 var vec = new Vector(InitVec.X, InitVec.Y);
                 if (nLasers > 1)
                 {
-                    var deltAngle = 2*Math.PI / nLasers;
+                    var deltAngle = 2 * Math.PI / nLasers;
                     var angle = deltAngle * i;
                     vec.X = SpeedMult * Math.Cos(angle);
                     vec.Y = SpeedMult * Math.Sin(angle);
@@ -610,8 +603,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     _ptLight = ptIntersect.Value;
                     laser._ptLight = _ptLight;
                     laser._vecLight = _vecLight;
+                    SetColor((_colorReflection + 1) & 0xffffff);
                 }
-                SetColor((_colorReflection + 1) & 0xffffff);
 
                 if (nBounces++ % 1000 == 0 || nDelay > 10)
                 {
@@ -1043,7 +1036,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             var lnIncident = new CLine(ptLight, new Point(ptLight.X + vecLight.X, ptLight.Y + vecLight.Y));
             double A = 0, B = 0, C = 0, m = 0, c = 0;
             var Isvertical = Math.Abs(vecLight.X) < BounceFrame.epsilon;
-            if (!Isvertical) 
+            if (!Isvertical)
             {
                 m = lnIncident.slope;
                 c = lnIncident.YIntercept;
