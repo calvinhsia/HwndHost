@@ -144,6 +144,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     Text =""{Binding Path=distBetweenEllipses}"" 
                     Width=""50""
                     ToolTip=""Distance between 2 ellipse halves"" />
+                <Label Content=""NumLasers""/>
+                <l:MyTextBox 
+                    Text =""{Binding Path=nLasers}"" 
+                    Width=""50""
+                    ToolTip=""Number of laser lights"" />
         </StackPanel>
         <UserControl Name=""MyUserControl"" Grid.Column=""1""></UserControl>
     </Grid>
@@ -268,13 +273,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public const int SpeedMult = 1000;
         public const double epsilon = .0001;
         public const double piOver180 = Math.PI / 180;
-        Point _ptLight;
-        Vector _vecLight;
+        public class Laser
+        {
+            public Point _ptLight;
+            public Vector _vecLight;
+        }
+        public List<Laser> _lstLasers;
         //double _distLineThresh = 1;
         Task _tskDrawing;
         int _nDelay = 0;
         int _nOutofBounds = 0;
         public int nDelay { get { return _nDelay; } set { _nDelay = value; RaisePropChanged(); } }
+        public int nLasers { get; set; } = 10;
 
         int _nPenWidth = 1;
         public int nPenWidth { get { return _nPenWidth; } set { _nPenWidth = value; RaisePropChanged(); } }
@@ -476,10 +486,17 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
         void ChooseRandomStartingRay()
         {
-            _ptLight.X = _rand.Next((int)(this.ActualWidth));
-            _ptLight.Y = _rand.Next((int)(this.ActualHeight));
-            _vecLight.X = 1;
-            _vecLight.Y = _rand.NextDouble();
+            var ll = new List<string>();
+            ll.Add("asdf");
+            var ss = ll[0];
+            _lstLasers[0]._ptLight.X = 2;
+            for (int i = 0; i < _lstLasers.Count; i++)
+            {
+                _lstLasers[i]._ptLight.X = _rand.Next((int)(this.ActualWidth));
+                _lstLasers[i]._ptLight.Y = _rand.Next((int)(this.ActualHeight));
+                _lstLasers[i]._vecLight.X = 1;
+                _lstLasers[i]._vecLight.Y = _rand.NextDouble();
+            }
         }
         void DoReflecting()
         {
@@ -487,91 +504,113 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             int nBounces = 0;
             int nLastBounceWhenStagnant = 0;
             _nOutofBounds = 0;
-            _ptLight = InitPt;
-            _vecLight = InitVec;
+            _lstLasers = new List<Laser>();
+            for (int i = 0; i < nLasers; i++)
+            {
+                var vec = new Vector(InitVec.X, InitVec.Y);
+                if (nLasers > 1)
+                {
+                    var deltAngle = 2*Math.PI / nLasers;
+                    var angle = deltAngle * i;
+                    vec.X = SpeedMult * Math.Cos(angle);
+                    vec.Y = SpeedMult * Math.Sin(angle);
+                }
+                _lstLasers.Add(new Laser()
+                {
+                    _ptLight = new Point(InitPt.X, InitPt.Y),
+                    _vecLight = vec
+                });
+            }
             var sw = new Stopwatch();
             sw.Start();
             while (!_cts.IsCancellationRequested
                 //&& nBounces++ < _maxBounces
                 )
             {
-                // for each line determine the intersection of our light vector incident line, which is just a segment
-                // if it's behind, ignore it
-                var lnIncident = new CLine(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
-
-                IMirror mirrorClosest = null;
-                double minDist = double.MaxValue;
-                Point? ptIntersect = null; // the point of intersection of the light vector and the closest mirror
-                lock (_lstMirrors)
+                foreach (var laser in _lstLasers)
                 {
-                    foreach (var mirror in _lstMirrors)
+                    var _ptLight = laser._ptLight;
+                    var _vecLight = laser._vecLight;
+                    // for each line determine the intersection of our light vector incident line, which is just a segment
+                    // if it's behind, ignore it
+                    var lnIncident = new CLine(_ptLight, new Point(_ptLight.X + _vecLight.X, _ptLight.Y + _vecLight.Y));
+
+                    IMirror mirrorClosest = null;
+                    double minDist = double.MaxValue;
+                    Point? ptIntersect = null; // the point of intersection of the light vector and the closest mirror
+                    lock (_lstMirrors)
                     {
-                        var ptIntersectTest = mirror.IntersectingPoint(_ptLight, _vecLight);
-                        if (ptIntersectTest.HasValue)
+                        foreach (var mirror in _lstMirrors)
                         {
-                            var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
-                            if (dist > epsilon && dist < minDist)
+                            var ptIntersectTest = mirror.IntersectingPoint(_ptLight, _vecLight);
+                            if (ptIntersectTest.HasValue)
                             {
-                                minDist = dist;
-                                mirrorClosest = mirror;
-                                ptIntersect = ptIntersectTest.Value;
+                                var dist = _ptLight.DistanceFromPoint(ptIntersectTest.Value);
+                                if (dist > epsilon && dist < minDist)
+                                {
+                                    minDist = dist;
+                                    mirrorClosest = mirror;
+                                    ptIntersect = ptIntersectTest.Value;
+                                }
                             }
                         }
                     }
-                }
-                if (mirrorClosest == null)
-                {
-                    //ReflectWindow.AddStatusMessage($"No closest mirror pt = {_ptLight} vec = {_vecLight}");
-                    if (nLastBounceWhenStagnant == nBounces - 1)
-                    {// both the last bounce and this bounce were stagnant
-                        nLastBounceWhenStagnant = nBounces;
-                        _nOutofBounds++;
-                        ChooseRandomStartingRay();
-                    }
-                    else
+                    if (mirrorClosest == null)
                     {
-                        _vecLight.X = -_vecLight.X;
-                        nLastBounceWhenStagnant = nBounces;
+                        //ReflectWindow.AddStatusMessage($"No closest mirror pt = {_ptLight} vec = {_vecLight}");
+                        if (nLastBounceWhenStagnant == nBounces - 1)
+                        {// both the last bounce and this bounce were stagnant
+                            nLastBounceWhenStagnant = nBounces;
+                            _nOutofBounds++;
+                            ChooseRandomStartingRay();
+                        }
+                        else
+                        {
+                            _vecLight.X = -_vecLight.X;
+                            nLastBounceWhenStagnant = nBounces;
+                        }
+                        continue;
                     }
-                    continue;
-                }
-                // now draw incident line from orig pt to intersection
-                NativeMethods.SelectObject(hDC, _clrFillReflection);
-                if (nBounces == 0)
-                {
-                    NativeMethods.MoveToEx(hDC, (int)(xScale * _ptLight.X), (int)(yScale * _ptLight.Y), ref _ptPrev);
-                }
-                //                this.EraseRect();this.DrawMirrors();
-                //                BounceFrame._instance.DrawLine(lnIncident);
-                if (AddEllipse && _lstMirrors.Count > 4)
-                {
-                    if (mirrorClosest as CEllipse == null)
+                    // now draw incident line from orig pt to intersection
+                    NativeMethods.SelectObject(hDC, _clrFillReflection);
+                    //if (nBounces == 0)
                     {
-                        this.ToString();
+                        NativeMethods.MoveToEx(hDC, (int)(xScale * _ptLight.X), (int)(yScale * _ptLight.Y), ref _ptPrev);
                     }
-                    var ellipse = _lstMirrors[4] as CEllipse;
-                    if (!ellipse.IsPointInside(ptIntersect.Value))
+                    //                this.EraseRect();this.DrawMirrors();
+                    //                BounceFrame._instance.DrawLine(lnIncident);
+                    if (AddEllipse && _lstMirrors.Count > 4)
                     {
-                        "point not in ellipse".ToString();
-                        //this.EraseRect();
-                        //this.DrawMirrors();
-                        //BounceFrame._instance.DrawLine(lnIncident);
-                        //var pp = ellipse.IntersectingPoint(_ptLight, _vecLight);
-                        //if (pp.HasValue)
-                        //{
-                        //    var d = _ptLight.DistanceFromPoint(pp.Value);
-                        //}
-                        //var dline = _ptLight.DistanceFromPoint(ptIntersect.Value);
+                        if (mirrorClosest as CEllipse == null)
+                        {
+                            this.ToString();
+                        }
+                        var ellipse = _lstMirrors[4] as CEllipse;
+                        if (!ellipse.IsPointInside(ptIntersect.Value))
+                        {
+                            "point not in ellipse".ToString();
+                            //this.EraseRect();
+                            //this.DrawMirrors();
+                            //BounceFrame._instance.DrawLine(lnIncident);
+                            //var pp = ellipse.IntersectingPoint(_ptLight, _vecLight);
+                            //if (pp.HasValue)
+                            //{
+                            //    var d = _ptLight.DistanceFromPoint(pp.Value);
+                            //}
+                            //var dline = _ptLight.DistanceFromPoint(ptIntersect.Value);
+                        }
                     }
-                }
-                NativeMethods.LineTo(hDC, (int)(xScale * ptIntersect.Value.X), (int)(yScale * ptIntersect.Value.Y));
+                    NativeMethods.LineTo(hDC, (int)(xScale * ptIntersect.Value.X), (int)(yScale * ptIntersect.Value.Y));
 
-                // now reflect vector
-                var newvecLight = mirrorClosest.Reflect(_ptLight, _vecLight, ptIntersect.Value);
+                    // now reflect vector
+                    var newvecLight = mirrorClosest.Reflect(_ptLight, _vecLight, ptIntersect.Value);
 
-                _vecLight = newvecLight;
-                // now set new pt 
-                _ptLight = ptIntersect.Value;
+                    _vecLight = newvecLight;
+                    // now set new pt 
+                    _ptLight = ptIntersect.Value;
+                    laser._ptLight = _ptLight;
+                    laser._vecLight = _vecLight;
+                }
                 SetColor((_colorReflection + 1) & 0xffffff);
 
                 if (nBounces++ % 1000 == 0 || nDelay > 10)
@@ -583,7 +622,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     }
                     ReflectWindow.AddStatusMessage(
                         $"# Mirrors= {_lstMirrors.Count} bounces = {nBounces:n0}" +
-                        $" ({_ptLight.X,8:n1},{_ptLight.Y,8:n1}) ({_vecLight.X,8:n4},{_vecLight.Y,8:n4})" +
+                        //                        $" ({_ptLight.X,8:n1},{_ptLight.Y,8:n1}) ({_vecLight.X,8:n4},{_vecLight.Y,8:n4})" +
                         $" OOB={_nOutofBounds}" +
                         $" B/S={bouncesPerSecond}");
                 }
@@ -1003,7 +1042,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             Point? ptIntersect1 = null;
             var lnIncident = new CLine(ptLight, new Point(ptLight.X + vecLight.X, ptLight.Y + vecLight.Y));
             double A = 0, B = 0, C = 0, m = 0, c = 0;
-            if (vecLight.X != 0) // nonVertical
+            var Isvertical = Math.Abs(vecLight.X) < BounceFrame.epsilon;
+            if (!Isvertical) 
             {
                 m = lnIncident.slope;
                 c = lnIncident.YIntercept;
@@ -1024,7 +1064,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 var sqt = Math.Sqrt(disc);
                 var x = (-B + sqt) / (2 * A);
                 // we have >0 intersections.
-                if (vecLight.X != 0) // nonVertical
+                if (!Isvertical)
                 {
                     var y = m * x + c;
                     ptIntersect0 = new Point(x, y);
@@ -1393,7 +1433,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
         public override string ToString()
         {
-            return $"({pt0.X:n1},{pt0.Y:n1}),({pt1.X:n1},{pt1.Y:n1})";
+            return $"({pt0.X:n1} , {pt0.Y:n1}),({pt1.X:n1} , {pt1.Y:n1})";
         }
     }
     // a textbox that selects all when focused:
