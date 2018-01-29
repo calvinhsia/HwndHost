@@ -114,11 +114,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         />
                 </StackPanel>
             </StackPanel>
-                <Label Content=""PenWidth""/>
+                <Label Content=""NumLasers""/>
                 <l:MyTextBox 
-                    Text =""{Binding Path=nPenWidth}"" 
+                    Text =""{Binding Path=nLasers}"" 
                     Width=""50""
-                    ToolTip=""Width of reflection pen"" />
+                    ToolTip=""Number of laser lights"" />
                 <Label Content=""InitPtX""/>
                 <l:MyTextBox 
                     Text =""{Binding Path=InitPtX}"" 
@@ -144,11 +144,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     Text =""{Binding Path=distBetweenEllipses}"" 
                     Width=""50""
                     ToolTip=""Distance between 2 ellipse halves"" />
-                <Label Content=""NumLasers""/>
+                <Label Content=""PenWidth""/>
                 <l:MyTextBox 
-                    Text =""{Binding Path=nLasers}"" 
+                    Text =""{Binding Path=nPenWidth}"" 
                     Width=""50""
-                    ToolTip=""Number of laser lights"" />
+                    ToolTip=""Width of reflection pen"" />
         </StackPanel>
         <UserControl Name=""MyUserControl"" Grid.Column=""1""></UserControl>
     </Grid>
@@ -260,12 +260,16 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         CancellationTokenSource _cts;
         public const int SpeedMult = 1000;
-        public const double epsilon = .0001;
+        public const double epsilon = .00001;
         public const double piOver180 = Math.PI / 180;
         public class Laser
         {
             public Point _ptLight;
             public Vector _vecLight;
+            public override string ToString()
+            {
+                return $"{_ptLight} {_vecLight}";
+            }
         }
         public List<Laser> _lstLasers;
         //double _distLineThresh = 1;
@@ -464,7 +468,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             DrawMirrors();
         }
 
-        void DrawMirrors()
+        public void DrawMirrors()
         {
             var hdc = NativeMethods.GetDC(_hwnd);
             NativeMethods.SelectObject(hdc, _clrMirror);
@@ -479,9 +483,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
         void ChooseRandomStartingRay()
         {
-            var ll = new List<string>();
-            ll.Add("asdf");
-            var ss = ll[0];
             _lstLasers[0]._ptLight.X = 2;
             for (int i = 0; i < _lstLasers.Count; i++)
             {
@@ -593,11 +594,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             //var dline = _ptLight.DistanceFromPoint(ptIntersect.Value);
                         }
                     }
+                    if (mirrorClosest as CLine != null)
+                    {
+                        "expected no line".ToString();
+                    }
                     NativeMethods.LineTo(hDC, (int)(xScale * ptIntersect.Value.X), (int)(yScale * ptIntersect.Value.Y));
 
                     // now reflect vector
                     var newvecLight = mirrorClosest.Reflect(_ptLight, _vecLight, ptIntersect.Value);
-
+                    if (newvecLight.Y >= 82445778296.655792 - 10)
+                    {
+                        "wowww".ToString();
+                    }
                     _vecLight = newvecLight;
                     // now set new pt 
                     _ptLight = ptIntersect.Value;
@@ -652,6 +660,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             get => _isRunning;
             set
             {
+                //if (value)
+                //{ // if triggered by hotkey make sure textboxes are updated
+                //    var bindings = BindingOperations.GetSourceUpdatingBindings(this);
+                //    foreach (var b in bindings)
+                //    {
+                //        b.UpdateSource();
+                //    }
+                //}
                 _isRunning = value;
                 if (value)
                 {
@@ -1022,7 +1038,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             var IsInside = false;
             var val = (pt.X - Center.X).squared() / (a * a) + (pt.Y - Center.Y).squared() / (b * b);
-            if (val <= 1 + 10 * BounceFrame.epsilon)
+            if (val <= 1 + 100 * BounceFrame.epsilon)
             {
                 IsInside = true;
             }
@@ -1030,12 +1046,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
         public Point? IntersectingPoint(Point ptLight, Vector vecLight)
         {
+            //BounceFrame._instance.DrawPoint(ptLight);
             Point? ptIntersectResult = null;
             Point? ptIntersect0 = null;
             Point? ptIntersect1 = null;
             var lnIncident = new CLine(ptLight, new Point(ptLight.X + vecLight.X, ptLight.Y + vecLight.Y));
+            //BounceFrame._instance.DrawLine(lnIncident);
             double A = 0, B = 0, C = 0, m = 0, c = 0;
-            var Isvertical = Math.Abs(vecLight.X) < BounceFrame.epsilon;
+            var Isvertical = Math.Abs(vecLight.X) < 10 * BounceFrame.epsilon;
             if (!Isvertical)
             {
                 m = lnIncident.slope;
@@ -1052,7 +1070,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
             // quadratic formula (-b +- sqrt(b*b-4ac)/2a
             var disc = B * B - 4 * A * C;
-            if (disc > 0) // else no intersection (==0 means both points are the same)
+            if (disc > BounceFrame.epsilon) // else no intersection (==0 means both points are the same)
             {
                 var sqt = Math.Sqrt(disc);
                 var x = (-B + sqt) / (2 * A);
@@ -1137,6 +1155,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     ptIntersectResult = ptIntersect1;
                 }
             }
+            if (!ptIntersectResult.HasValue)
+            {
+                "no intersection on ellipse?".ToString();
+            }
+            if (ptIntersectResult.HasValue && !this.IsPointInside(ptIntersectResult.Value)) // we said that it intersects at this point, but the point is not in the ellipse. Let's recalc to force it onto ellipse
+            {
+                BounceFrame._instance.EraseRect();
+                BounceFrame._instance.DrawMirrors();
+                BounceFrame._instance.DrawPoint(ptIntersectResult.Value);
+                "PtIntersect not on ellipse".ToString();
+                ptIntersectResult = GetPointOnEllipseClosestToPoint(ptIntersectResult.Value);
+            }
             return ptIntersectResult;
         }
 
@@ -1198,24 +1228,72 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
             return _ptonArc.Value;
         }
+        public CLine GetTangentLineAtPoint(Point ptIntersect)
+        {
+            double m = 0;
+            if (Math.Abs(ptIntersect.Y - Center.Y) < BounceFrame.epsilon) // vertical 
+            {
+                " the tangent to a vertical line is horizontal (slope = 0)".ToString();
+            }
+            else
+            {
+                // calculate the slope of the tangent line at that point by differentiation
+                m = -b * b * (ptIntersect.X - Center.X) / (a * a * (ptIntersect.Y - Center.Y));
+            }
+            var lnTangent = new CLine(
+                ptIntersect,
+                new Point(ptIntersect.X + BounceFrame.SpeedMult,
+                        ptIntersect.Y + BounceFrame.SpeedMult * m),
+                IsLimitedInLength: false // a tangent has infinite length
+                        );
+            return lnTangent;
+        }
 
         public Vector Reflect(Point ptLight, Vector vecLight, Point ptIntersect)
         {
-            // calculate the slope of the tangent line at that point by differentiation
-            var m = -b * b * (ptIntersect.X - Center.X) / (a * a * (ptIntersect.Y - Center.Y));
-            //                var m = -b * b * ptIntersect.X / (a * a * ptIntersect.Y);
-            // create a vector with the desired slope in either direction
-            var vecTangent = new Vector()
-            {
-                X = BounceFrame.SpeedMult,
-                Y = BounceFrame.SpeedMult * m
-            };
-            // create a tangent line
-            var lnTangent = new CLine(ptIntersect, new Point(ptIntersect.X + vecTangent.X, ptIntersect.Y + vecTangent.Y));
-            // BounceFrame._instance.DrawLine(lnTangent);
             // now reflect the light off that tangent line
+            var lnTangent = GetTangentLineAtPoint(ptIntersect);
+            //BounceFrame._instance.DrawLine(lnTangent);
             vecLight = lnTangent.Reflect(ptLight, vecLight, ptIntersect);
             return vecLight;
+        }
+
+        /// <summary>
+        /// due to rounding error, we might get a point very close, but not on ellipse.
+        /// </summary>
+        /// <param name="ptIntersect"></param>
+        /// <returns></returns>
+        public Point GetPointOnEllipseClosestToPoint(Point ptIntersect)
+        {
+            var lnTangent = GetTangentLineAtPoint(ptIntersect);
+            //BounceFrame._instance.DrawLine(lnTangent);
+            var m = 0.0;
+            if (lnTangent.deltaX == 0) // vertical tangent
+            {
+                "isvert".ToString();
+            }
+            else
+            {
+                m = -1 / lnTangent.slope; // perpendicular to tangent
+            }
+
+            var vec = new Vector(
+                BounceFrame.SpeedMult,
+                BounceFrame.SpeedMult * m
+            );
+            var newpt = lnTangent.IntersectingPoint(ptIntersect, vec);
+            //BounceFrame._instance.DrawPoint(newpt.Value);
+            if (newpt.HasValue)
+            {
+                var distBetween = ptIntersect.DistanceFromPoint(newpt.Value);
+                ptIntersect = newpt.Value;
+                var isptInEllipse = this.IsPointInside(ptIntersect);
+            }
+            else
+            {
+                "newpt no value".ToString();
+            }
+            return ptIntersect;
         }
 
         public void Draw(IntPtr hDC)
@@ -1247,14 +1325,19 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
     }
 
+
+    /// <summary>
+    /// A line may be limited in length (a mirror is only so wide)
+    /// </summary>
     public class CLine : IMirror
     {
         public Point pt0 { get; private set; }
         public Point pt1 { get; private set; }
+        public bool IsLimitedInLength { get; set; } = true;
         Lazy<double> lazyLineSegLength;
         public double LineLength => lazyLineSegLength.Value;
 
-        public CLine(Point p0, Point p1)
+        public CLine(Point p0, Point p1, bool IsLimitedInLength = true)
         {
             this.pt0 = p0;
             this.pt1 = p1;
@@ -1262,6 +1345,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 Math.Sqrt((pt1.Y - pt0.Y).squared() + (pt1.X - pt0.X).squared()),
                isThreadSafe: false // only accessed from one thread
             );
+            this.IsLimitedInLength = IsLimitedInLength;
         }
         // divide by zero yields double.NaN
         public double slope => deltaY / deltaX;
@@ -1325,7 +1409,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public bool LeftHalf(Point c)
         {
             var res = (pt1.X - pt0.X) * (c.Y - pt0.Y) - (pt1.Y - pt0.Y) * (c.X - pt0.X);
-            return res > 0;
+            return res > BounceFrame.epsilon;
         }
 
         /// <summary>
@@ -1336,34 +1420,44 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             Point? ptIntersect = null;
             var lnIncident = new CLine(ptLight, new Point(ptLight.X + vecLight.X, ptLight.Y + vecLight.Y));
+            //BounceFrame._instance.DrawLine(lnIncident);
             Point? ptIntersectTest = this.IntersectingPoint(lnIncident);
             // the incident line intersects the mirror. Our mirrors have finite width
             // let's see if the intersection point is within the mirror's edges
             if (ptIntersectTest.HasValue)
             {
-                var distPt0 = this.pt0.DistanceFromPoint(ptIntersectTest.Value);
-                var distPt1 = ptIntersectTest.Value.DistanceFromPoint(this.pt1);
-                var thislinelen = this.LineLength;
-                if (distPt0 + distPt1 - thislinelen < BounceFrame.epsilon)
+                if (this.IsLimitedInLength)
                 {
-                    if (vecLight.X == 0) // vert
+                    var distPt0 = this.pt0.DistanceFromPoint(ptIntersectTest.Value);
+                    var distPt1 = ptIntersectTest.Value.DistanceFromPoint(this.pt1);
+                    var thislinelen = this.LineLength;
+                    if (distPt0 + distPt1 - thislinelen < BounceFrame.epsilon)
                     {
-                        var ss = Math.Sign(vecLight.Y);
-                        var s2 = Math.Sign(ptIntersectTest.Value.Y - ptLight.Y);
-                        if (ss * s2 == 1) // in our direction?
+                        var Isvertical = Math.Abs(vecLight.X) < BounceFrame.epsilon;
+                        if (Isvertical)
                         {
-                            ptIntersect = ptIntersectTest.Value;
+                            var ss = Math.Sign(vecLight.Y);
+                            var s2 = Math.Sign(ptIntersectTest.Value.Y - ptLight.Y);
+                            if (ss * s2 == 1) // in our direction?
+                            {
+                                ptIntersect = ptIntersectTest.Value;
+                            }
+                        }
+                        else  // non-vertical
+                        {
+                            var ss = Math.Sign(vecLight.X);
+                            var s2 = Math.Sign(ptIntersectTest.Value.X - ptLight.X);
+                            if (ss * s2 == 1) // in our direction?
+                            {
+                                ptIntersect = ptIntersectTest.Value;
+                            }
                         }
                     }
-                    else  // non-vertical
-                    {
-                        var ss = Math.Sign(vecLight.X);
-                        var s2 = Math.Sign(ptIntersectTest.Value.X - ptLight.X);
-                        if (ss * s2 == 1) // in our direction?
-                        {
-                            ptIntersect = ptIntersectTest.Value;
-                        }
-                    }
+
+                }
+                else
+                {
+                    ptIntersect = ptIntersectTest;
                 }
             }
             return ptIntersect;
@@ -1371,11 +1465,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         public Vector Reflect(Point ptLight, Vector vecLight, Point ptIntersect)
         {
-            if (this.deltaX == 0) // vertical line
+            if (Math.Abs(this.deltaX) < BounceFrame.epsilon) // vertical line
             {
                 vecLight.X = -vecLight.X;
             }
-            else if (this.deltaY == 0) // horiz line
+            else if (Math.Abs(this.deltaY) < BounceFrame.epsilon) // horiz line
             {
                 vecLight.Y = -vecLight.Y;
             }
@@ -1383,7 +1477,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 //// create incident line endpoint to intersection with correct seg length
                 var lnIncident = new CLine(ptLight, new Point(ptLight.X + vecLight.X, ptLight.Y + vecLight.Y));
-                //                BounceFrame._instance.DrawLine(lnIncident);
+                //BounceFrame._instance.EraseRect();
+                //BounceFrame._instance.DrawMirrors();
+                //BounceFrame._instance.DrawLine(lnIncident);
                 //var lnIncident = new CLine(_ptLight, ptTarget.Value);
                 //var angBetween = lnIncidentTest.angleBetween(this);
                 //var angClosest = Math.Atan(this.slope) / _piOver180;
@@ -1408,6 +1504,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 //    vecLight.X = -vecLight.X;
                 //    vecLight.Y = -vecLight.Y;
                 //}
+                //BounceFrame._instance.DrawLine(this);
                 var halfplaneLight = this.LeftHalf(ptLight);
                 var halfplaneTestPoint = this.LeftHalf(ptTest);
                 if (halfplaneLight ^ halfplaneTestPoint) // xor
@@ -1426,7 +1523,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
         public override string ToString()
         {
-            return $"({pt0.X:n1} , {pt0.Y:n1}),({pt1.X:n1} , {pt1.Y:n1})";
+            return $"({pt0.X} , {pt0.Y}),({pt1.X} , {pt1.Y})";
         }
     }
     // a textbox that selects all when focused:
@@ -1470,14 +1567,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public static bool IsVectorInSameDirection(this Point ptTest, Point ptLight, Vector vecLight)
         {
             var fIsSameDirection = false;
-            if (vecLight.X == 0) // vertical line
+            if (Math.Abs(vecLight.X) < BounceFrame.epsilon) // vertical line
             {
                 if (Math.Sign(ptTest.Y - ptLight.Y) == Math.Sign(vecLight.Y))
                 {
                     fIsSameDirection = true;
                 }
             }
-            else if (vecLight.Y == 0) // horiz
+            else if (Math.Abs(vecLight.Y) < BounceFrame.epsilon) // horiz
             {
                 if (Math.Sign(ptTest.X - ptLight.X) == Math.Sign(vecLight.X))
                 {
