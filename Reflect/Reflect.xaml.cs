@@ -307,17 +307,20 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             this._cts = new CancellationTokenSource();
             Clear(fKeepUserMirrors: false);
         }
-        public void Clear(bool fKeepUserMirrors)
+        public void Clear(bool fKeepUserMirrors, Size? newSize = null)
         {
             IsRunning = false;
-            var newSize = new Size(this.ActualWidth, this.ActualHeight);
+            if (!newSize.HasValue)
+            {
+                newSize = new Size(this.ActualWidth, this.ActualHeight);
+            }
 
             this.EraseRect();
             var mrg = 18;
             var ptTopLeft = new Point(mrg, mrg);
-            var ptTopRight = new Point(newSize.Width - 1 - mrg, mrg);
-            var ptBotLeft = new Point(mrg, newSize.Height - 1 - mrg);
-            var ptBotRight = new Point(newSize.Width - 1 - mrg, newSize.Height - 1 - mrg);
+            var ptTopRight = new Point(newSize.Value.Width - 1 - mrg, mrg);
+            var ptBotLeft = new Point(mrg, newSize.Value.Height - 1 - mrg);
+            var ptBotRight = new Point(newSize.Value.Width - 1 - mrg, newSize.Value.Height - 1 - mrg);
             _nOutofBounds = 0;
             _colorReflection = 0;
             _fPenDown = false;
@@ -336,8 +339,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     if (AddEllipse || AddMushrooms)
                     {
                         var ellipseTopLeft = new Point(mrg + 10, mrg + 20);
-                        var ellipseBotRight = new Point(newSize.Width - mrg * 2,
-                            newSize.Height - distBetweenEllipses * 2);
+                        var ellipseBotRight = new Point(newSize.Value.Width - mrg * 2,
+                            newSize.Value.Height - distBetweenEllipses * 2);
                         var ellipse = new CEllipse(
                             ellipseTopLeft,
                             ellipseBotRight,
@@ -884,6 +887,15 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             mitemShowEllipsePts.IsCheckable = true;
             mitemShowEllipsePts.IsCheckable = ShowEllipsePts;
 
+            cm.AddMnuItem(
+                "SetSize",
+                "Set size to 1000 X 800",
+                (o, e) =>
+                {
+                    Clear(fKeepUserMirrors: false, newSize: new Size(1000, 800));
+                }
+            );
+
             cm.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
             cm.IsOpen = true;
         }
@@ -1385,33 +1397,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
             return result;
         }
-
-        public double DistanceToPoint(Point pt)
-        {
-            double dist = Math.Abs((pt1.Y - pt0.Y) * pt.X - (pt1.X - pt0.X) * pt.Y + pt1.X * pt0.Y - pt1.Y * pt0.X) /
-                Math.Sqrt((pt1.Y - pt0.Y).squared() + (pt1.X - pt0.X).squared());
-            return dist;
-        }
-        public double YIntercept
-        {
-            get
-            {
-                var yint1 = pt0.Y - this.slope * pt0.X;
-                return yint1;
-            }
-        }
-
-        /// <summary>
-        /// given a point ptTest, see if it's on the "left" or Not of the plane
-        /// </summary>
-        /// <param name="ptTest"></param>
-        /// <returns></returns>
-        public bool LeftHalf(Point c)
-        {
-            var res = (pt1.X - pt0.X) * (c.Y - pt0.Y) - (pt1.Y - pt0.Y) * (c.X - pt0.X);
-            return res > BounceFrame.epsilon;
-        }
-
         /// <summary>
         /// Given a point and a vector direction, determine the point of intersection if any
         /// </summary>
@@ -1461,6 +1446,32 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
             }
             return ptIntersect;
+        }
+
+        public double DistanceToPoint(Point pt)
+        {
+            double dist = Math.Abs((pt1.Y - pt0.Y) * pt.X - (pt1.X - pt0.X) * pt.Y + pt1.X * pt0.Y - pt1.Y * pt0.X) /
+                Math.Sqrt((pt1.Y - pt0.Y).squared() + (pt1.X - pt0.X).squared());
+            return dist;
+        }
+        public double YIntercept
+        {
+            get
+            {
+                var yint1 = pt0.Y - this.slope * pt0.X;
+                return yint1;
+            }
+        }
+
+        /// <summary>
+        /// given a point ptTest, see if it's on the "left" or Not of the plane
+        /// </summary>
+        /// <param name="ptTest"></param>
+        /// <returns></returns>
+        public bool LeftHalf(Point c)
+        {
+            var res = (pt1.X - pt0.X) * (c.Y - pt0.Y) - (pt1.Y - pt0.Y) * (c.X - pt0.X);
+            return res > BounceFrame.epsilon;
         }
 
         public Vector Reflect(Point ptLight, Vector vecLight, Point ptIntersect)
