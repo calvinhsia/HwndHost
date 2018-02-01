@@ -526,6 +526,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 foreach (var laser in _lstLasers)
                 {
+                    if (_cts.IsCancellationRequested)
+                    {
+                        break;
+                    }
                     var ptLight = laser._ptLight;
                     var vecLight = laser._vecLight;
                     // for each line determine the intersection of our light vector incident line, which is just a segment
@@ -612,26 +616,25 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     laser._ptLight = ptLight;
                     laser._vecLight = vecLight;
                     SetColor((_colorReflection + 1) & 0xffffff);
-                }
-
-                if (nBounces++ % 1000 == 0 || nDelay > 10)
-                {
-                    int bouncesPerSecond = 0;
-                    if (sw.ElapsedMilliseconds > 0)
+                    if (nBounces % 1000 == 0 || nDelay > 10)
                     {
-                        bouncesPerSecond = (int)(1000 * nBounces / sw.ElapsedMilliseconds);
+                        int bouncesPerSecond = 0;
+                        if (sw.ElapsedMilliseconds > 0)
+                        {
+                            bouncesPerSecond = (int)(1000 * nBounces / sw.ElapsedMilliseconds);
+                        }
+                        ReflectWindow.AddStatusMessage(
+                            $"# Mirrors= {_lstMirrors.Count} bounces = {nBounces:n0}" +
+                            //                        $" ({_ptLight.X,8:n1},{_ptLight.Y,8:n1}) ({_vecLight.X,8:n4},{_vecLight.Y,8:n4})" +
+                            $" OOB={_nOutofBounds}" +
+                            $" B/S={bouncesPerSecond}");
                     }
-                    ReflectWindow.AddStatusMessage(
-                        $"# Mirrors= {_lstMirrors.Count} bounces = {nBounces:n0}" +
-                        //                        $" ({_ptLight.X,8:n1},{_ptLight.Y,8:n1}) ({_vecLight.X,8:n4},{_vecLight.Y,8:n4})" +
-                        $" OOB={_nOutofBounds}" +
-                        $" B/S={bouncesPerSecond}");
+                    if (nDelay > 0)
+                    {
+                        Thread.Sleep(nDelay);
+                    }
+                    nBounces++;
                 }
-                if (nDelay > 0)
-                {
-                    Thread.Sleep(nDelay);
-                }
-
             }
             NativeMethods.ReleaseDC(_hwnd, hDC);
         }
