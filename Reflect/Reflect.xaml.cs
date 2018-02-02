@@ -348,8 +348,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             new Point(0, 0)
                         );
 
-                        InitPt.X = ellipse.Center.X;
-                        InitPt.Y = ellipse.Center.Y - (ellipse.Height / 2 - 10);
+                        //InitPt.X = ellipse.Center.X;
+                        //InitPt.Y = ellipse.Center.Y - (ellipse.Height / 2 - 10);
 
                         this._lstMirrors.Add(ellipse);
                         if (AddMushrooms)
