@@ -1,8 +1,10 @@
 ﻿using hWndHost;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -64,7 +66,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         IsReadOnly=""True""
         TextWrapping=""Wrap"" 
         VerticalAlignment=""Top"" 
-        Width=""420""/>
+        Width=""220""/>
     <Label Content=""SnakeLength""/>
     <TextBox 
         Text =""{Binding Path=SnakeLength}"" 
@@ -80,22 +82,24 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         Minimum=""0""
         Maximum=""1000""
         Margin=""12,2,0,0"" 
-        Value=""{Binding Path=SnakeSpeed}""
+        Value=""{Binding Path=Delay}""
         VerticalAlignment=""Top"" 
         ToolTip=""Change the delay""
         Width=""100""/>
     <Button 
-        Name=""btnReset"" 
-        Content=""Reset"" 
+        Name=""btnStopGo"" 
+        Content=""_Go"" 
         HorizontalAlignment=""Left"" 
         Margin=""10,2,0,0"" 
+        IsEnabled=""{Binding Path=IsStopped}""
         VerticalAlignment=""Top"" 
         Width=""55""/>
 
 </DockPanel>
 </Grid>
 ";
-            var bgd = CreateSolidBrush(new IntPtr(0xf00f));
+
+            var bgd = CreateSolidBrush(new IntPtr(0xffffff));
             var snakePit = new SnakePit(this, bgd);
             var strReader = new System.IO.StringReader(strxaml);
             var xamlreader = XmlReader.Create(strReader);
@@ -105,53 +109,76 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             grid.Children.Add(snakePit);
 
             this.Content = grid;
-            var btnReset = (Button)grid.FindName("btnReset");
-            btnReset.Click += (og, eg) =>
-              {
-                  snakePit.DoSnake();
-              };
+            var btnStopGo = (Button)grid.FindName("btnStopGo");
+            btnStopGo.Click += async (og, eg) =>
+                {
+                    snakePit.IsRunning = !snakePit.IsRunning;
+                    if (snakePit.IsRunning)
+                    {
+                        await snakePit.DoSnake();
+                    }
+                    else
+                    {
+                    }
+                };
         }
     }
-    public class SnakePit : MyHwndHost
+    public enum SnakeBehavior
     {
-        Random rand = new Random(1);
+        Random,
+        Momentum,
+    }
+    public class SnakePit : MyHwndHost, INotifyPropertyChanged
+    {
+        readonly Random rand = new Random(1);
         Cell[,] cells;
         int numrows;
         int numcols;
-        int cellWidth = 15;
-        int cellHeight = 15;
+        readonly int cellWidth = 15;
+        readonly int cellHeight = 15;
         Snake[] snakes;
-        SnakeWindow snakePitWindow;
+        readonly SnakeWindow snakePitWindow;
         Size sizePit; // pixels
         Rect rectPit;
-        IntPtr bgdColor;
-        IntPtr colorSnake = CreateSolidBrush(new IntPtr(0xffff));
-        DispatcherTimer timer = new DispatcherTimer();
+        readonly IntPtr bgdColor;
+        readonly IntPtr colorSnake = CreateSolidBrush(new IntPtr(0xff));
+        //        DispatcherTimer timer = new DispatcherTimer();
 
+        bool _IsRunning;
+        public bool IsRunning { get { return _IsRunning; } set { if (_IsRunning != value) { _IsRunning = value; OnMyPropertyChanged(); } } }
+        public bool IsStopped => !IsRunning;
         public int SnakeLength { get; set; } = 10;
-        public int SnakeSpeed { get; set; } = 200; //msecs
+        public int Delay { get; set; } = 200; //msecs
 
         public int NumSnakes { get; set; } = 1;
+
+        public SnakeBehavior Behavior { get; set; } = SnakeBehavior.Random;
+
+        Task taskAnimate;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        void OnMyPropertyChanged([CallerMemberName] string propName = "")
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propName));
+        }
 
         public SnakePit(SnakeWindow snakeWindow, IntPtr bgd) : base(bgd)
         {
             this.snakePitWindow = snakeWindow;
             this.bgdColor = bgd;
-            timer.Interval = TimeSpan.FromMilliseconds(SnakeSpeed);
-            timer.IsEnabled = true;
-            var oldSpeed = SnakeSpeed;
-            var oldLen = SnakeLength;
-            timer.Tick += (o, e) =>
-            {
-                for (int i = 0; i < snakes.Length; i++)
-                {
-                    if (!snakes[i].Move())
-                    {
-                        DoSnake();
-                        break;
-                    }
-                }
-            };
+            //timer.Interval = TimeSpan.FromMilliseconds(SnakeSpeed);
+            //timer.IsEnabled = true;
+            //timer.Tick += (o, e) =>
+            //{
+            //    for (int i = 0; i < snakes.Length; i++)
+            //    {
+            //        if (!snakes[i].Move())
+            //        {
+            //            var t=DoSnake();
+            //            break;
+            //        }
+            //    }
+            //};
         }
         void DrawCell(Cell cell, IntPtr color)
         {
@@ -179,15 +206,20 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
         public override void OnReady(IntPtr hwnd)
         {
-            DoSnake();
+            DoSnake().GetAwaiter();
         }
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
             base.OnRenderSizeChanged(sizeInfo);
-            DoSnake();
+            DoSnake().GetAwaiter();
         }
-        public void DoSnake()
+        public async Task DoSnake()
         {
+            if (taskAnimate?.IsCompleted == false)
+            {
+                IsRunning = false;
+                await taskAnimate;
+            }
             sizePit = new Size(ActualWidth * xScale, ActualHeight * yScale);
             rectPit = new Rect(0, 0, (int)sizePit.Width, (int)sizePit.Height);
             DrawRect(rectPit, bgdColor);
@@ -206,6 +238,24 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 snakes[i] = new Snake(this, i);
             }
+            taskAnimate = Task.Run(async () =>
+             {
+                 while (IsRunning)
+                 {
+                     for (int i = 0; i < snakes.Length; i++)
+                     {
+                         if (!snakes[i].Move())
+                         {
+                             IsRunning = false;
+                             break;
+                         }
+                     }
+                     if (Delay > 0)
+                     {
+                         await Task.Delay(TimeSpan.FromMilliseconds(Delay));
+                     }
+                 }
+             });
             //var hDC = GetDC(_hwnd);
             //FillRect(hDC, ref rectPit, bgdColor);
 
@@ -213,6 +263,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             //var y = 0;
             //WinRect oldRect = new WinRect();
         }
+
         public class Cell
         {
             public int snakeNum;
@@ -232,16 +283,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         public class Snake
         {
-            List<Cell> snakeBody = new List<Cell>();
-            SnakePit snakePit;
-            int snakeNum;
-            int[] randDirs = new[] { 0, 1, 2, 3 };
+            readonly List<Cell> snakeBody = new List<Cell>();
+            readonly SnakePit snakePit;
+            readonly int snakeNum;
+            readonly int[] randDirs = new[] { 0, 1, 2, 3 };
             public Snake(SnakePit snakePit, int snakeNum)
             {
                 this.snakePit = snakePit;
                 this.snakeNum = snakeNum;
-                var x = snakePit.numcols / 2;
-                var y = snakePit.numrows / 2;
                 for (int i = 0; i < snakePit.SnakeLength; i++)
                 {
                     if (!Move(fEraseTail: false))
@@ -267,13 +316,13 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             internal bool Move(bool fEraseTail = true)
             {// we just need to erase the tail and draw the head
                 var didMove = false;
-                var xStart = 0;
-                var yStart = 0;
+                int xStart;
+                int yStart;
                 if (snakeBody.Count == 0)
                 {
                     while (true)
                     {
-                        xStart =snakePit.rand.Next( snakePit.numcols);
+                        xStart = snakePit.rand.Next(snakePit.numcols);
                         yStart = snakePit.rand.Next(snakePit.numrows);
                         if (snakePit.cells[yStart, xStart] == null)
                         {
@@ -334,6 +383,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     snakePit.DrawCell(newHead, snakePit.colorSnake);
                     snakePit.cells[newHead.y, newHead.x] = newHead;
                     didMove = true;
+                }
+                else
+                {
+                    "".ToString();
                 }
                 return didMove;
             }
