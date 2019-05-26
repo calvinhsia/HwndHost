@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -9,11 +10,13 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using System.Xml;
 using static hWndHost.NativeMethods;
 
 namespace Snakes
@@ -31,11 +34,82 @@ namespace Snakes
 
         private void SnakeWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            var bgd = CreateSolidBrush(
-                new IntPtr(0xf00f));
-            var snakePit = new SnakePit(this, bgd);
-            this.Content = snakePit;
+            // Make a namespace referring to our namespace and assembly
+            // using the prefix "l:"
+            //xmlns:l=""clr-namespace:Fish;assembly=Fish"""
+            var nameSpace = this.GetType().Namespace;
+            var asm = System.IO.Path.GetFileNameWithoutExtension(
+                Assembly.GetExecutingAssembly().Location);
 
+            var xmlns = string.Format(
+@"xmlns:l=""clr-namespace:{0};assembly={1}""", nameSpace, asm);
+            //there are a lot of quotes (and braces) in XAML
+            //and the C# string requires quotes to be doubled
+            var strxaml =
+@"<Grid
+xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
+" + xmlns + // add our xaml namespace
+@" Margin=""5,5,5,5"">
+<Grid.RowDefinitions>
+    <RowDefinition/>
+    <RowDefinition Height=""25"" />
+</Grid.RowDefinitions>
+<DockPanel Grid.Row=""1"">
+    <TextBox 
+        Name=""tbxStatus"" 
+        HorizontalAlignment=""Left"" 
+        Height=""23"" 
+        Margin=""10,2,0,0"" 
+        IsReadOnly=""True""
+        TextWrapping=""Wrap"" 
+        VerticalAlignment=""Top"" 
+        Width=""420""/>
+    <Label Content=""SnakeLength""/>
+    <TextBox 
+        Text =""{Binding Path=SnakeLength}"" 
+        Width = ""25""
+        ToolTip=""Length of snake"" />
+    <Label Content=""NumSnakes""/>
+    <TextBox 
+        Text =""{Binding Path=NumSnakes}"" 
+        Width = ""25""
+        ToolTip=""Length of snake"" />
+    <Slider 
+        HorizontalAlignment=""Left"" 
+        Minimum=""0""
+        Maximum=""1000""
+        Margin=""12,2,0,0"" 
+        Value=""{Binding Path=SnakeSpeed}""
+        VerticalAlignment=""Top"" 
+        ToolTip=""Change the delay""
+        Width=""100""/>
+    <Button 
+        Name=""btnReset"" 
+        Content=""Reset"" 
+        HorizontalAlignment=""Left"" 
+        Margin=""10,2,0,0"" 
+        VerticalAlignment=""Top"" 
+        Width=""55""/>
+
+</DockPanel>
+</Grid>
+";
+            var bgd = CreateSolidBrush(new IntPtr(0xf00f));
+            var snakePit = new SnakePit(this, bgd);
+            var strReader = new System.IO.StringReader(strxaml);
+            var xamlreader = XmlReader.Create(strReader);
+            var grid = (Grid)(XamlReader.Load(xamlreader));
+            grid.DataContext = snakePit;
+
+            grid.Children.Add(snakePit);
+
+            this.Content = grid;
+            var btnReset = (Button)grid.FindName("btnReset");
+            btnReset.Click += (og, eg) =>
+              {
+                  snakePit.DoSnake();
+              };
         }
     }
     public class SnakePit : MyHwndHost
@@ -46,7 +120,6 @@ namespace Snakes
         int numcols;
         int cellWidth = 15;
         int cellHeight = 15;
-        int numSnakes = 1;
         Snake[] snakes;
         SnakeWindow snakePitWindow;
         Size sizePit; // pixels
@@ -56,17 +129,21 @@ namespace Snakes
         DispatcherTimer timer = new DispatcherTimer();
 
         public int SnakeLength { get; set; } = 10;
+        public int SnakeSpeed { get; set; } = 200; //msecs
 
+        public int NumSnakes { get; set; } = 1;
 
         public SnakePit(SnakeWindow snakeWindow, IntPtr bgd) : base(bgd)
         {
             this.snakePitWindow = snakeWindow;
             this.bgdColor = bgd;
-            timer.Interval = TimeSpan.FromMilliseconds(1);
+            timer.Interval = TimeSpan.FromMilliseconds(SnakeSpeed);
             timer.IsEnabled = true;
+            var oldSpeed = SnakeSpeed;
+            var oldLen = SnakeLength;
             timer.Tick += (o, e) =>
             {
-                for (int i = 0; i < numSnakes; i++)
+                for (int i = 0; i < snakes.Length; i++)
                 {
                     if (!snakes[i].Move())
                     {
@@ -109,7 +186,7 @@ namespace Snakes
             base.OnRenderSizeChanged(sizeInfo);
             DoSnake();
         }
-        private void DoSnake()
+        public void DoSnake()
         {
             sizePit = new Size(ActualWidth * xScale, ActualHeight * yScale);
             rectPit = new Rect(0, 0, (int)sizePit.Width, (int)sizePit.Height);
@@ -117,7 +194,7 @@ namespace Snakes
             numrows = (int)(ActualHeight * yScale / cellHeight);
             numcols = (int)(ActualWidth * xScale / cellWidth);
             cells = new Cell[numrows, numcols];
-            snakes = new Snake[numSnakes];
+            snakes = new Snake[NumSnakes];
             //WinPoint oldpt=new WinPoint();
             //MoveToEx(hDC, 0, 0, ref oldpt);
             //LineTo(hDC, 0, numrows - 1);
@@ -125,7 +202,7 @@ namespace Snakes
             //DrawCell(0, numrows - 1, IntPtr.Zero);
             //DrawCell(numcols - 1, 0, IntPtr.Zero);
             //DrawCell(numcols - 1, numrows - 1, IntPtr.Zero);
-            for (int i = 0; i < numSnakes; i++)
+            for (int i = 0; i < NumSnakes; i++)
             {
                 snakes[i] = new Snake(this, i);
             }
@@ -149,7 +226,7 @@ namespace Snakes
             }
             public override string ToString()
             {
-                return $"{x},{y}";
+                return $"{ x},{y}";
             }
         }
 
@@ -167,10 +244,14 @@ namespace Snakes
                 var y = snakePit.numrows / 2;
                 for (int i = 0; i < snakePit.SnakeLength; i++)
                 {
-                    var cell = new Cell(snakeNum, x, y + i);
-                    snakePit.cells[y + i, x] = cell;
-                    snakeBody.Add(cell);
-                    snakePit.DrawCell(cell, snakePit.colorSnake);
+                    if (!Move(fEraseTail: false))
+                    {
+
+                    }
+                    //var cell = new Cell(snakeNum, x, y + i);
+                    //snakePit.cells[y + i, x] = cell;
+                    //snakeBody.Add(cell);
+                    //snakePit.DrawCell(cell, snakePit.colorSnake);
                 }
             }
             void Shuffledirs()
@@ -183,21 +264,42 @@ namespace Snakes
                     randDirs[r] = tmp;
                 }
             }
-            internal bool Move()
+            internal bool Move(bool fEraseTail = true)
             {// we just need to erase the tail and draw the head
                 var didMove = false;
-                var oldHead = snakeBody[snakePit.SnakeLength - 1];
-                var tail = snakeBody[0];
-                snakePit.DrawCell(tail, snakePit.bgdColor);
-                snakeBody.RemoveAt(0);
-                snakePit.cells[tail.y, tail.x] = null;
+                var xStart = 0;
+                var yStart = 0;
+                if (snakeBody.Count == 0)
+                {
+                    while (true)
+                    {
+                        xStart =snakePit.rand.Next( snakePit.numcols);
+                        yStart = snakePit.rand.Next(snakePit.numrows);
+                        if (snakePit.cells[yStart, xStart] == null)
+                        {
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    xStart = snakeBody[snakeBody.Count - 1].x;
+                    yStart = snakeBody[snakeBody.Count - 1].y;
+                }
+                if (fEraseTail)
+                {
+                    var tail = snakeBody[0];
+                    snakePit.DrawCell(tail, snakePit.bgdColor);
+                    snakeBody.RemoveAt(0);
+                    snakePit.cells[tail.y, tail.x] = null;
+                }
                 Shuffledirs();
                 var gotGoodDir = false;
                 int x = 0, y = 0;
                 for (int i = 0; i < randDirs.Length; i++)
                 {
-                    x = oldHead.x;
-                    y = oldHead.y;
+                    x = xStart;
+                    y = yStart;
                     switch (randDirs[i])
                     {
                         case 0:
