@@ -50,15 +50,19 @@ namespace Snakes
         Snake[] snakes;
         SnakeWindow snakePitWindow;
         Size sizePit; // pixels
-        WinRect rectPit;
+        Rect rectPit;
         IntPtr bgdColor;
         IntPtr colorSnake = CreateSolidBrush(new IntPtr(0xffff));
         DispatcherTimer timer = new DispatcherTimer();
+
+        public int SnakeLength { get; set; } = 10;
+
+
         public SnakePit(SnakeWindow snakeWindow, IntPtr bgd) : base(bgd)
         {
             this.snakePitWindow = snakeWindow;
             this.bgdColor = bgd;
-            timer.Interval = TimeSpan.FromMilliseconds(10);
+            timer.Interval = TimeSpan.FromMilliseconds(1);
             timer.IsEnabled = true;
             timer.Tick += (o, e) =>
             {
@@ -70,41 +74,30 @@ namespace Snakes
                         break;
                     }
                 }
-                ////                  var hDC = GetDC(_hwnd);
-                //if (oldRect.Left > 0)
-                //{
-                //    FillRect(hDC, ref oldRect, bgdColor);
-                //}
-                //var rect = new WinRect(x, y, 50 + x, 50 + y);
-                //var clr = CreateSolidBrush(new IntPtr(0xffff));
-                //SelectObject(hDC, clr);
-                //Ellipse(hDC,
-                //    x, y, 50 + x, 50 + y);
-                //x++;
-                //y++;
-                //oldRect = rect;
             };
         }
-        void DrawCell(int x, int y, IntPtr color)
+        void DrawCell(Cell cell, IntPtr color)
+        {
+            var rect = new Rect(cell.x * cellWidth, cell.y * cellHeight, cellWidth, cellHeight);
+            DrawRect(rect, color);
+        }
+        void DrawRect(Rect rect, IntPtr color)
         {
             var hDC = GetDC(_hwnd);
-            //if (oldRect.Left > 0)
-            //{
-            //    FillRect(hDC, ref oldRect, bgdColor);
-            //}
-            //var rect = new WinRect(
-            //    x * cellWidth,
-            //    y * cellHeight,
-            //    (x + 1) * cellWidth,
-            //    (y + 1) * cellHeight);
-            SelectObject(hDC, color);
-            Ellipse(hDC,
-                x * cellWidth,
-                y * cellHeight,
-                (x + 1) * cellWidth,
-                (y + 1) * cellHeight);
-            x++;
-            y++;
+            if (color != bgdColor)
+            {
+                SelectObject(hDC, color);
+                Ellipse(hDC,
+                    (int)(rect.X),
+                    (int)(rect.Y),
+                    (int)(rect.X + rect.Width),
+                    (int)(rect.Y + rect.Height));
+            }
+            else
+            {
+                var wr = rect.ToWinRect();
+                FillRect(hDC, ref wr, bgdColor);
+            }
             ReleaseDC(_hwnd, hDC);
         }
         public override void OnReady(IntPtr hwnd)
@@ -119,7 +112,8 @@ namespace Snakes
         private void DoSnake()
         {
             sizePit = new Size(ActualWidth * xScale, ActualHeight * yScale);
-            rectPit = new WinRect(0, 0, (int)sizePit.Width, (int)sizePit.Height);
+            rectPit = new Rect(0, 0, (int)sizePit.Width, (int)sizePit.Height);
+            DrawRect(rectPit, bgdColor);
             numrows = (int)(ActualHeight * yScale / cellHeight);
             numcols = (int)(ActualWidth * xScale / cellWidth);
             cells = new Cell[numrows, numcols];
@@ -127,10 +121,10 @@ namespace Snakes
             //WinPoint oldpt=new WinPoint();
             //MoveToEx(hDC, 0, 0, ref oldpt);
             //LineTo(hDC, 0, numrows - 1);
-            DrawCell(0, 0, IntPtr.Zero);
-            DrawCell(0, numrows - 1, IntPtr.Zero);
-            DrawCell(numcols - 1, 0, IntPtr.Zero);
-            DrawCell(numcols - 1, numrows - 1, IntPtr.Zero);
+            //DrawCell(0, 0, IntPtr.Zero);
+            //DrawCell(0, numrows - 1, IntPtr.Zero);
+            //DrawCell(numcols - 1, 0, IntPtr.Zero);
+            //DrawCell(numcols - 1, numrows - 1, IntPtr.Zero);
             for (int i = 0; i < numSnakes; i++)
             {
                 snakes[i] = new Snake(this, i);
@@ -161,7 +155,6 @@ namespace Snakes
 
         public class Snake
         {
-            const int snakeLength = 10; // # cells
             List<Cell> snakeBody = new List<Cell>();
             SnakePit snakePit;
             int snakeNum;
@@ -172,12 +165,12 @@ namespace Snakes
                 this.snakeNum = snakeNum;
                 var x = snakePit.numcols / 2;
                 var y = snakePit.numrows / 2;
-                for (int i = 0; i < snakeLength; i++)
+                for (int i = 0; i < snakePit.SnakeLength; i++)
                 {
                     var cell = new Cell(snakeNum, x, y + i);
                     snakePit.cells[y + i, x] = cell;
                     snakeBody.Add(cell);
-                    snakePit.DrawCell(cell.x, cell.y, snakePit.colorSnake);
+                    snakePit.DrawCell(cell, snakePit.colorSnake);
                 }
             }
             void Shuffledirs()
@@ -193,9 +186,9 @@ namespace Snakes
             internal bool Move()
             {// we just need to erase the tail and draw the head
                 var didMove = false;
-                var oldHead = snakeBody[snakeLength - 1];
+                var oldHead = snakeBody[snakePit.SnakeLength - 1];
                 var tail = snakeBody[0];
-                snakePit.DrawCell(tail.x, tail.y, snakePit.bgdColor);
+                snakePit.DrawCell(tail, snakePit.bgdColor);
                 snakeBody.RemoveAt(0);
                 snakePit.cells[tail.y, tail.x] = null;
                 Shuffledirs();
@@ -236,7 +229,7 @@ namespace Snakes
                 {
                     var newHead = new Cell(this.snakeNum, x, y);
                     snakeBody.Add(newHead);
-                    snakePit.DrawCell(newHead.x, newHead.y, snakePit.colorSnake);
+                    snakePit.DrawCell(newHead, snakePit.colorSnake);
                     snakePit.cells[newHead.y, newHead.x] = newHead;
                     didMove = true;
                 }
