@@ -77,12 +77,21 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         Text =""{Binding Path=NumSnakes}"" 
         Width = ""25""
         ToolTip=""Length of snake"" />
+    <Label Content=""Straight""/>
+    <TextBox 
+        Text =""{Binding Path=Straight}"" 
+        Width = ""25""
+        ToolTip=""likelihood snake goes forward"" />
+    <Label Content=""Delay""/>
+    <TextBox 
+        Text =""{Binding Path=Delay}"" 
+        Width = ""25""
+        ToolTip=""delay between moves in msecs"" />
     <Slider 
         HorizontalAlignment=""Left"" 
         Minimum=""0""
         Maximum=""1000""
         Margin=""12,2,0,0"" 
-        Value=""{Binding Path=Delay}""
         VerticalAlignment=""Top"" 
         ToolTip=""Change the delay""
         Width=""100""/>
@@ -148,8 +157,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public bool IsRunning { get { return _IsRunning; } set { if (_IsRunning != value) { _IsRunning = value; OnMyPropertyChanged(); } } }
         public bool IsStopped => !IsRunning;
         public int SnakeLength { get; set; } = 10;
-        public int Delay { get; set; } = 200; //msecs
+        public int Delay { get; set; } = 2; //msecs
 
+        public int Straight { get; set; } = 100;
         public int NumSnakes { get; set; } = 1;
 
         public SnakeBehavior Behavior { get; set; } = SnakeBehavior.Random;
@@ -287,6 +297,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             readonly SnakePit snakePit;
             readonly int snakeNum;
             readonly int[] randDirs = new[] { 0, 1, 2, 3 };
+            int lastDir;
             public Snake(SnakePit snakePit, int snakeNum)
             {
                 this.snakePit = snakePit;
@@ -345,11 +356,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 Shuffledirs();
                 var gotGoodDir = false;
                 int x = 0, y = 0;
-                for (int i = 0; i < randDirs.Length; i++)
+                if (snakePit.Straight > 0)
+                {
+                    if (snakePit.rand.Next(100) < snakePit.Straight)
+                    {
+                        TryDir(lastDir);
+                    }
+                }
+                void TryDir(int dir)
                 {
                     x = xStart;
                     y = yStart;
-                    switch (randDirs[i])
+                    switch (dir)
                     {
                         case 0:
                             x += 1;
@@ -371,8 +389,19 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             if (snakePit.cells[y, x] == null)
                             {
                                 gotGoodDir = true;
-                                break;
+                                lastDir = dir;
                             }
+                        }
+                    }
+                }
+                if (!gotGoodDir)
+                {
+                    for (int i = 0; i < randDirs.Length; i++)
+                    {
+                        TryDir(randDirs[i]);
+                        if (gotGoodDir)
+                        {
+                            break;
                         }
                     }
                 }
