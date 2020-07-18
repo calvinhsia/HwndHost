@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26228.9
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30307.4
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "hWndHost", "hWndHost\hWndHost.vbproj", "{D633F93C-DB74-4A5D-9D1F-638C58BBA2CC}"
 EndProject
@@ -14,6 +14,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lissajous", "Lissajous\Lissajous.csproj", "{94C82B90-5D02-4372-BAFE-2941E525DF0A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reflect", "Reflect\Reflect.csproj", "{7EBC2392-1691-4D14-B879-B6676949253C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AreaFill", "AreaFill\AreaFill.csproj", "{63FCE81F-B30D-4F49-91F3-0B7B22405446}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -45,8 +47,15 @@ Global
 		{7EBC2392-1691-4D14-B879-B6676949253C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7EBC2392-1691-4D14-B879-B6676949253C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7EBC2392-1691-4D14-B879-B6676949253C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63FCE81F-B30D-4F49-91F3-0B7B22405446}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63FCE81F-B30D-4F49-91F3-0B7B22405446}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63FCE81F-B30D-4F49-91F3-0B7B22405446}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63FCE81F-B30D-4F49-91F3-0B7B22405446}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FEAD6DDA-43E6-405F-9695-ED487DBE0D87}
 	EndGlobalSection
 EndGlobal
