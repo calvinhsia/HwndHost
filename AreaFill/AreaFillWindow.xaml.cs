@@ -21,6 +21,7 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Xml;
 using System.Diagnostics;
+using System.Drawing;
 
 namespace AreaFill
 {
@@ -74,6 +75,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             >
             <CheckBox Content=""_Running"" 
                 IsChecked= ""{Binding Path=IsRunning}"" />
+            <CheckBox Content=""DepthFirst"" 
+                IsChecked= ""{Binding Path=DepthFirst}"" />
+            <Button Name=""btnErase"" Content=""_Erase""/>
             <Label Content=""CellWidth""/>
             <l:MyTextBox 
                 Text =""{Binding Path=CellWidth}"" 
@@ -128,6 +132,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 grid.DataContext = areaFillArea;
 
                 _tbxStatus = (TextBox)grid.FindName("tbxStatus");
+                var btnErase = (Button)grid.FindName("btnErase");
+                btnErase.Click += (o, ee) => { areaFillArea.DoErase(); };
                 var userCtrl = (UserControl)grid.FindName("MyUserControl");
                 userCtrl.Content = areaFillArea;
                 this.Content = grid;
@@ -198,6 +204,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         bool _IsRunning = false;
         private IntPtr _hdc;
         private bool _ResetRequired;
+        Stack<SD.Point> _stack;
+        Queue<SD.Point> _queue;
+
+        public bool DepthFirst { get; set; }
 
         int _CellWidth = 1;
         public int CellWidth
@@ -227,6 +237,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             set { if (_nTotCols != value) { _nTotCols = value; RaisePropChanged(); } }
         }
 
+        private SD.Point _ptStartFill;
+
         public bool IsRunning
         {
             get { return _IsRunning; }
@@ -252,21 +264,34 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             try
                             {
                                 _IsRunning = true;
-                                _hdc = NativeMethods.GetDC(_hwnd);
-                                while (!cts.IsCancellationRequested)
+
+                                if (DepthFirst)
                                 {
-                                    //                                  DoGenerations();
+                                    _stack = new Stack<SD.Point>();
+                                    _stack.Push(_ptStartFill);
+                                    while (_stack.Count > 0 && !cts.IsCancellationRequested)
+                                    {
+                                        var pt = _stack.Pop();
+                                        DoAreaFill(pt);
+                                    }
                                 }
-                                NativeMethods.ReleaseDC(_hwnd, _hdc);
-                                var rect = new NativeMethods.WinRect();
-                                NativeMethods.GetClientRect(_hwnd, ref rect);
-                                NativeMethods.ValidateRect(_hwnd, ref rect);
+                                else
+                                {
+                                    _queue = new Queue<SD.Point>();
+                                    _queue.Enqueue(_ptStartFill);
+                                    while (_queue.Count > 0 && !cts.IsCancellationRequested)
+                                    {
+                                        var pt = _queue.Dequeue();
+                                        DoAreaFill(pt);
+                                    }
+                                }
                             }
                             catch (Exception)
                             {
                             }
                             tcs.SetResult(0);
                             _IsRunning = false;
+                            RaisePropChanged();
                         }
                         );
                     }
@@ -283,19 +308,23 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public SD.Point? _ptOld { get; private set; }
         public bool _fPenDown { get; private set; }
 
-        SD.SolidBrush m_brushFill = new SD.SolidBrush(SD.Color.Blue);
-        SD.Color m_oColor = SD.Color.Black;
+        int _oColor = 0xffffff;
         private IntPtr _pen;
+
         private SD.Point _ptCurrent;
         bool[,] _cells;
         private int nPenWidth = 1;
         private NativeMethods.WinPoint _prevPoint;
+        NativeMethods.WinRect wRect;
+        private int MK_LBUTTON = 1;
+        private int MK_RBUTTON = 2;
 
         public AreaFillArea(AreaFillWindow areaFillWindow, IntPtr bgdOcean) : base(bgdOcean)
         {
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_NCHITTEST);
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_MOUSEMOVE);
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_LBUTTONDOWN);
+            LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_RBUTTONUP);
             this._areaFillWindow = areaFillWindow;
             this._bgdOcean = bgdOcean;
             this.WndProcExt = (int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
@@ -308,6 +337,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     case NativeMethods.WM_.WM_LBUTTONDOWN:
                     case NativeMethods.WM_.WM_LBUTTONUP:
                     case NativeMethods.WM_.WM_MOUSEMOVE:
+                    case NativeMethods.WM_.WM_RBUTTONUP:
                         var x = lParam.ToInt32() & 0xffff;
                         var y = (lParam.ToInt32() >> 16) & 0xffff;
                         var pt = new SD.Point(x, y);
@@ -316,13 +346,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         switch ((NativeMethods.WM_)msg)
                         {
                             case NativeMethods.WM_.WM_MOUSEMOVE:
-                                this.MyOnMouseMove(pt);
+                                this.MyOnMouseMove(pt, wParam);
                                 break;
                             case NativeMethods.WM_.WM_LBUTTONDOWN:
-                                this.MyOnOnMouseDown(pt);
+                                this.MyOnOnMouseDown(pt, wParam);
                                 break;
                             case NativeMethods.WM_.WM_LBUTTONUP:
-                                this.MyOnOnMouseUp(pt);
+                            case NativeMethods.WM_.WM_RBUTTONUP:
+                                this.MyOnOnMouseUp(pt, wParam, msg);
                                 break;
                         }
                         break;
@@ -335,19 +366,39 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             nTotRows = (int)(this.ActualHeight * yScale / CellHeight);
             nTotCols = (int)(this.ActualWidth * xScale / CellWidth);
             _cells = new bool[nTotCols, nTotRows];
+            if (_hdc != IntPtr.Zero)
+            {
+                NativeMethods.ReleaseDC(_hwnd, _hdc);
+            }
+            _hdc = NativeMethods.GetDC(_hwnd);
         }
 
         public override void OnReady(IntPtr hwnd)
         {
-            InitWorld();
-            DrawACell(new SD.Point(100, 100));
+            DoErase();
+            for (int i = 0; i < 10; i++)
+            {
+                for (int j = 0; j < 100; j++)
+                {
+                    DrawACell(new SD.Point(i, j));
+                }
+            }
+            DoErase();
             //            IsRunning = true;
+        }
+        public void DoErase()
+        {
+            IsRunning = false;
+            _ptOld = null;
+            _oColor = 0xffffff;
+            EraseRect();
+            InitWorld();
         }
 
         internal void OnSizeChanged()
         {
         }
-        SD.Point SdPointFromWpfPt(Point pt)
+        SD.Point SdPointFromWpfPt(System.Windows.Point pt)
         {
             return new SD.Point((int)(pt.X * xScale), (int)(pt.Y * yScale));
         }
@@ -355,6 +406,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
 
         }
+
         bool DrawACell(SD.Point pt)
         {
             bool didDraw = false;
@@ -362,83 +414,115 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 if (!_cells[pt.X, pt.Y])
                 {
-                    var hdc = NativeMethods.GetDC(_hwnd);
-                    m_oColor = SD.Color.FromArgb((int)(((((uint)m_oColor.ToArgb() & 0xffffff) + 140) & 0xffffff) | 0xff000000));
-                    //                    NativeMethods.SetPixel(hdc, pt.X, pt.Y, (IntPtr)m_oColor.ToArgb());
-                    _pen = NativeMethods.CreatePen(nPenStyle: 0, nWidth: nPenWidth, nColor: (IntPtr)m_oColor.ToArgb());
-                    var br = NativeMethods.CreateSolidBrush((IntPtr)m_oColor.ToArgb());
-                    NativeMethods.SelectObject(hdc, br);
-                    if (_ptOld.HasValue)
-                    {
-                        NativeMethods.MoveToEx(hdc, _ptOld.Value.X, _ptOld.Value.Y, ref _prevPoint);
-                    }
-                    NativeMethods.LineTo(hdc, pt.X, pt.Y);
-                    NativeMethods.DeleteObject(_pen);
-                    NativeMethods.ReleaseDC(_hwnd, hdc);
+                    _oColor = (_oColor + 140) & 0xffffff;
+                    //                    _pen = NativeMethods.CreatePen(nPenStyle: 0, nWidth: nPenWidth, nColor: (IntPtr)_oColor);
+                    var br = NativeMethods.CreateSolidBrush((IntPtr)_oColor);
+                    wRect.Left = pt.X;
+                    wRect.Right = pt.X + _CellWidth;
+                    wRect.Top = pt.Y;
+                    wRect.Bottom = pt.Y + _CellHeight;
+
+                    NativeMethods.FillRect(_hdc, ref wRect, br);
+                    NativeMethods.DeleteObject(br);
+
+                    //m_oColor = SD.Color.FromArgb((int)(((((uint)m_oColor.ToArgb() & 0xffffff) + 140) & 0xffffff) | 0xff000000));
+                    //m_brushFill = new SolidBrush(m_oColor);
+                    //var g = Graphics.FromHwnd(_hwnd);
+                    //m_oGraphics.FillRectangle(br,
+                    //    m_Offset.Width + ptcell.X * m_cellSize.Width,
+                    //    m_Offset.Height + ptcell.Y * m_cellSize.Height,
+                    //    m_cellSize.Width,
+                    //    m_cellSize.Height);
+
+                    //NativeMethods.SelectObject(hdc, _pen);
+                    //if (_ptOld.HasValue)
+                    //{
+                    //    NativeMethods.MoveToEx(hdc, _ptOld.Value.X, _ptOld.Value.Y, ref _prevPoint);
+                    //}
+                    //NativeMethods.LineTo(hdc, pt.X, pt.Y);
+                    //NativeMethods.DeleteObject(_pen);
+                    //_ptOld = pt;
+                    _cells[pt.X, pt.Y] = true;
                     didDraw = true;
                 }
             }
             return didDraw;
         }
-        bool IsValid(SD.Point pt)
+        void DrawLineOfCells(SD.Point p1, SD.Point p2)
         {
-            if (pt.X >= 0 && pt.X < _cells.GetLength(0) && pt.Y >= 0 && pt.Y < _cells.GetLength(1))
+            // http://en.wikipedia.org/wiki/Bresenham%27s\_line\_algorithm
+            int x0 = p1.X;
+            int y0 = p1.Y;
+            int x1 = p2.X;
+            int y1 = p2.Y;
+            int x, cx, deltax, xstep,
+                  y, cy, deltay, ystep,
+                   error;
+            bool st;
+            // find largest delta for pixel steps
+            st = (Math.Abs(y1 - y0) > Math.Abs(x1 - x0));
+            // if deltay > deltax then swap x,y
+            if (st)
+            {
+                x0 ^= y0; y0 ^= x0; x0 ^= y0; // swap(x0, y0);
+                x1 ^= y1; y1 ^= x1; x1 ^= y1; // swap(x1, y1);
+            }
+            deltax = Math.Abs(x1 - x0);
+            deltay = Math.Abs(y1 - y0);
+            error = (deltax / 2);
+            y = y0;
+            if (x0 > x1) { xstep = -1; }
+            else { xstep = 1; }
+            if (y0 > y1) { ystep = -1; }
+            else { ystep = 1; }
+            for (x = x0; (x != (x1 + xstep)); x += xstep)
+            {
+                cx = x; cy = y; // copy of x, copy of y
+                // if x,y swapped above, swap them back now
+                if (st)
+                {
+                    cx ^= cy; cy ^= cx; cx ^= cy;
+                }
+                DrawACell(new SD.Point(cx, cy));
+                //if (drawit(new Point(cx, cy), br))
+                //{
+                //    br = m_brushGenerated;
+                //}
+                error -= deltay; // converge toward end of line
+                if (error < 0)
+                { // not done yet
+                    y += ystep;
+                    error += deltax;
+                }
+            }
+        }
+
+        bool IsValidPoint(SD.Point pt)
+        {
+            if (pt.X >= 0 && pt.X < _cells.GetLength(0) * _CellWidth && pt.Y >= 0 && pt.Y < _cells.GetLength(1) * _CellHeight)
             {
                 return true;
             }
             return false;
         }
-        internal void MyOnOnMouseDown(SD.Point ptCurrent)
+        internal void MyOnOnMouseDown(SD.Point ptCurrent, IntPtr wParam)
         {
-            if (Mouse.PrimaryDevice.LeftButton == MouseButtonState.Pressed)
+            if (IsValidPoint(ptCurrent))
             {
-                this._penModeDrag = !this._penModeDrag;
-            }
-            else
-            {
-                if (IsValid(ptCurrent))
-                {
-                    if (_penModeDrag)
-                    {
-                        _ptOld = ptCurrent;
-                    }
-                    else
-                    {
-                        if (Mouse.PrimaryDevice.LeftButton == MouseButtonState.Pressed)
-                        {
-                            _fPenDown = false;
-                            _ptOld = null;
-                        }
-                        else
-                        {
-                            _fPenDown = true;
-                            _ptCurrent = ptCurrent;
-                            if (!_ptOld.HasValue)
-                            {
-                                _ptOld = _ptCurrent;
-                            }
-                            //                        InvalidateVisual();
-                        }
-                    }
-                }
+                _ptOld = ptCurrent;
             }
         }
-        internal void MyOnMouseMove(SD.Point ptCurrent)
+        internal void MyOnMouseMove(SD.Point ptCurrent, IntPtr wParam)
         {
-            if (_penModeDrag)
+            if (wParam.ToInt32() == MK_LBUTTON)
             {
-                //                if (e.LeftButton == MouseButtonState.Pressed)
+                if (_ptOld.HasValue)
                 {
-                    if (_ptOld.HasValue)
+                    if (IsValidPoint(ptCurrent))
                     {
-                        //                        var ptCurrent = SdPointFromWpfPt(e.GetPosition(this));
-                        if (IsValid(ptCurrent))
-                        {
-                            _ptCurrent = ptCurrent;
-                            DrawACell(_ptCurrent);
-                            _cells[_ptCurrent.X, _ptCurrent.Y] = true;
-                            _ptOld = _ptCurrent;
-                        }
+                        _ptCurrent = ptCurrent;
+                        DrawLineOfCells(_ptOld.Value, _ptCurrent);
+                        _ptOld = _ptCurrent;
                     }
                 }
             }
@@ -447,18 +531,45 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
             }
         }
-        internal void MyOnOnMouseUp(SD.Point ptCurrent)
+        internal void MyOnOnMouseUp(SD.Point ptCurrent, IntPtr wParam, int msg)
         {
-            //if (_fPenDown)
+            if (IsValidPoint(ptCurrent))
             {
-                if (IsValid(ptCurrent))
+                if (msg == (int)NativeMethods.WM_.WM_RBUTTONUP)
+                {
+                    _ptStartFill = ptCurrent;
+                    IsRunning = true;
+                }
+                else
                 {
                     _ptCurrent = ptCurrent;
                     _ptOld = _ptCurrent;
-                    _fPenDown = false;
-                    _cells[_ptCurrent.X, _ptCurrent.Y] = true;
                     DrawACell(_ptCurrent);
-                    //                InvalidateVisual();
+                }
+            }
+        }
+
+        private void DoAreaFill(SD.Point ptCurrent)
+        {
+            if (IsValidPoint(ptCurrent))
+            {
+                if (!_cells[ptCurrent.X, ptCurrent.Y])
+                {
+                    DrawACell(ptCurrent);
+                    if (this.DepthFirst)
+                    {
+                        _stack.Push(new SD.Point(ptCurrent.X - 1, ptCurrent.Y));
+                        _stack.Push(new SD.Point(ptCurrent.X + 1, ptCurrent.Y));
+                        _stack.Push(new SD.Point(ptCurrent.X, ptCurrent.Y + 1));
+                        _stack.Push(new SD.Point(ptCurrent.X, ptCurrent.Y - 1));
+                    }
+                    else
+                    {
+                        _queue.Enqueue(new SD.Point(ptCurrent.X - 1, ptCurrent.Y));
+                        _queue.Enqueue(new SD.Point(ptCurrent.X + 1, ptCurrent.Y));
+                        _queue.Enqueue(new SD.Point(ptCurrent.X, ptCurrent.Y + 1));
+                        _queue.Enqueue(new SD.Point(ptCurrent.X, ptCurrent.Y - 1));
+                    }
                 }
             }
         }
