@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using SD = System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -22,6 +21,7 @@ using System.Windows.Shapes;
 using System.Xml;
 using System.Diagnostics;
 using System.Drawing;
+using System.Runtime.InteropServices;
 
 namespace AreaFill
 {
@@ -204,8 +204,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         bool _IsRunning = false;
         private IntPtr _hdc;
         private bool _ResetRequired;
-        Stack<SD.Point> _stack;
-        Queue<SD.Point> _queue;
+        Stack<Point> _stack;
+        Queue<Point> _queue;
 
         public bool DepthFirst { get; set; }
 
@@ -237,7 +237,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             set { if (_nTotCols != value) { _nTotCols = value; RaisePropChanged(); } }
         }
 
-        private SD.Point _ptStartFill;
+        private Point _ptStartFill;
 
         public bool IsRunning
         {
@@ -264,10 +264,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                             try
                             {
                                 _IsRunning = true;
+                                _stack = new Stack<Point>();
+                                _queue = new Queue<Point>();
 
                                 if (DepthFirst)
                                 {
-                                    _stack = new Stack<SD.Point>();
                                     _stack.Push(_ptStartFill);
                                     while (_stack.Count > 0 && !cts.IsCancellationRequested)
                                     {
@@ -277,7 +278,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 }
                                 else
                                 {
-                                    _queue = new Queue<SD.Point>();
                                     _queue.Enqueue(_ptStartFill);
                                     while (_queue.Count > 0 && !cts.IsCancellationRequested)
                                     {
@@ -305,13 +305,13 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
         }
 
-        public SD.Point? _ptOld { get; private set; }
+        public Point? _ptOld { get; private set; }
         public bool _fPenDown { get; private set; }
 
         int _oColor = 0xffffff;
         private IntPtr _pen;
 
-        private SD.Point _ptCurrent;
+        private Point _ptCurrent;
         bool[,] _cells;
         private int nPenWidth = 1;
         private NativeMethods.WinPoint _prevPoint;
@@ -340,7 +340,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     case NativeMethods.WM_.WM_RBUTTONUP:
                         var x = lParam.ToInt32() & 0xffff;
                         var y = (lParam.ToInt32() >> 16) & 0xffff;
-                        var pt = new SD.Point(x, y);
+                        var pt = new Point(x, y);
                         //var arg = new MouseEventArgs(Mouse.PrimaryDevice, 0);
                         //arg.RoutedEvent = Mouse.MouseMoveEvent;
                         switch ((NativeMethods.WM_)msg)
@@ -380,7 +380,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 for (int j = 0; j < 100; j++)
                 {
-                    DrawACell(new SD.Point(i, j));
+                    DrawACell(new Point(i, j));
                 }
             }
             DoErase();
@@ -398,16 +398,16 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         internal void OnSizeChanged()
         {
         }
-        SD.Point SdPointFromWpfPt(System.Windows.Point pt)
+        Point SdPointFromWpfPt(System.Windows.Point pt)
         {
-            return new SD.Point((int)(pt.X * xScale), (int)(pt.Y * yScale));
+            return new Point((int)(pt.X * xScale), (int)(pt.Y * yScale));
         }
-        void DrawLine(SD.Point pt1, SD.Point pt2)
+        void DrawLine(Point pt1, Point pt2)
         {
 
         }
 
-        bool DrawACell(SD.Point pt)
+        bool DrawACell(Point pt)
         {
             bool didDraw = false;
             if (pt.X >= 0 && pt.X < _cells.GetLength(0) && pt.Y >= 0 && pt.Y < _cells.GetLength(1))
@@ -448,7 +448,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
             return didDraw;
         }
-        void DrawLineOfCells(SD.Point p1, SD.Point p2)
+        void DrawLineOfCells(Point p1, Point p2)
         {
             // http://en.wikipedia.org/wiki/Bresenham%27s\_line\_algorithm
             int x0 = p1.X;
@@ -483,7 +483,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 {
                     cx ^= cy; cy ^= cx; cx ^= cy;
                 }
-                DrawACell(new SD.Point(cx, cy));
+                DrawACell(new Point(cx, cy));
                 //if (drawit(new Point(cx, cy), br))
                 //{
                 //    br = m_brushGenerated;
@@ -497,7 +497,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
         }
 
-        bool IsValidPoint(SD.Point pt)
+        bool IsValidPoint(Point pt)
         {
             if (pt.X >= 0 && pt.X < _cells.GetLength(0) * _CellWidth && pt.Y >= 0 && pt.Y < _cells.GetLength(1) * _CellHeight)
             {
@@ -505,14 +505,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
             return false;
         }
-        internal void MyOnOnMouseDown(SD.Point ptCurrent, IntPtr wParam)
+        internal void MyOnOnMouseDown(Point ptCurrent, IntPtr wParam)
         {
             if (IsValidPoint(ptCurrent))
             {
                 _ptOld = ptCurrent;
             }
         }
-        internal void MyOnMouseMove(SD.Point ptCurrent, IntPtr wParam)
+        internal void MyOnMouseMove(Point ptCurrent, IntPtr wParam)
         {
             if (wParam.ToInt32() == MK_LBUTTON)
             {
@@ -531,7 +531,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
             }
         }
-        internal void MyOnOnMouseUp(SD.Point ptCurrent, IntPtr wParam, int msg)
+        internal void MyOnOnMouseUp(Point ptCurrent, IntPtr wParam, int msg)
         {
             if (IsValidPoint(ptCurrent))
             {
@@ -549,7 +549,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
         }
 
-        private void DoAreaFill(SD.Point ptCurrent)
+        private void DoAreaFill(Point ptCurrent)
         {
             if (IsValidPoint(ptCurrent))
             {
@@ -558,20 +558,47 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     DrawACell(ptCurrent);
                     if (this.DepthFirst)
                     {
-                        _stack.Push(new SD.Point(ptCurrent.X - 1, ptCurrent.Y));
-                        _stack.Push(new SD.Point(ptCurrent.X + 1, ptCurrent.Y));
-                        _stack.Push(new SD.Point(ptCurrent.X, ptCurrent.Y + 1));
-                        _stack.Push(new SD.Point(ptCurrent.X, ptCurrent.Y - 1));
+                        _stack.Push(new Point(ptCurrent.X - 1, ptCurrent.Y));
+                        _stack.Push(new Point(ptCurrent.X + 1, ptCurrent.Y));
+                        _stack.Push(new Point(ptCurrent.X, ptCurrent.Y + 1));
+                        _stack.Push(new Point(ptCurrent.X, ptCurrent.Y - 1));
                     }
                     else
                     {
-                        _queue.Enqueue(new SD.Point(ptCurrent.X - 1, ptCurrent.Y));
-                        _queue.Enqueue(new SD.Point(ptCurrent.X + 1, ptCurrent.Y));
-                        _queue.Enqueue(new SD.Point(ptCurrent.X, ptCurrent.Y + 1));
-                        _queue.Enqueue(new SD.Point(ptCurrent.X, ptCurrent.Y - 1));
+                        _queue.Enqueue(new Point(ptCurrent.X - 1, ptCurrent.Y));
+                        _queue.Enqueue(new Point(ptCurrent.X + 1, ptCurrent.Y));
+                        _queue.Enqueue(new Point(ptCurrent.X, ptCurrent.Y + 1));
+                        _queue.Enqueue(new Point(ptCurrent.X, ptCurrent.Y - 1));
                     }
                 }
             }
         }
     }
+    // the Register For COM Interop is disabled for EXEs, so we need to run regasm <exe> /tlb
+    /*
+        call "$(DevEnvDir)..\..\vc\Auxiliary\build\vcvarsall.bat" x86
+        regasm.exe "$(TargetPath)"  /tlb
+     */
+
+    [ComVisible(true)]
+    [Guid("98D44702-2AB4-47F3-97A7-85EE798EEF90")]
+    public struct Point
+    {
+        public Point(int x, int y)
+        {
+            X = x;
+            Y = y;
+        }
+        public int X;
+        public int Y;
+    }
+
+    [ComVisible(true)]
+    [Guid("B351FB5A-AB97-4F37-8B72-D8AE7E0ADCA0")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IAreaFill
+    {
+        void DoAreaFill(IntPtr hWnd, Point ArraySize, Point StartPoint);
+    }
+
 }

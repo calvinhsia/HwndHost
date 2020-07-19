@@ -102,4 +102,9 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>call "$(DevEnvDir)..\..\vc\Auxiliary\build\vcvarsall.bat" x86
+regasm.exe "$(TargetPath)"  /tlb
+</PostBuildEvent>
+  </PropertyGroup>
 </Project>
