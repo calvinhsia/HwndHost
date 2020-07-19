@@ -22,6 +22,7 @@ using System.Xml;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Runtime.ExceptionServices;
 
 namespace AreaFill
 {
@@ -206,6 +207,19 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         private bool _ResetRequired;
         Stack<Point> _stack;
         Queue<Point> _queue;
+        public Point? _ptOld { get; private set; }
+        public bool _fPenDown { get; private set; }
+
+        int _oColor = 0xffffff;
+        private IntPtr _pen;
+
+        private Point _ptCurrent;
+        bool[,] _cells;
+        private int nPenWidth = 1;
+        private NativeMethods.WinPoint _prevPoint;
+        NativeMethods.WinRect wRect;
+        private int MK_LBUTTON = 1;
+        private int MK_RBUTTON = 2;
 
         public bool DepthFirst { get; set; }
 
@@ -305,22 +319,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
         }
 
-        public Point? _ptOld { get; private set; }
-        public bool _fPenDown { get; private set; }
-
-        int _oColor = 0xffffff;
-        private IntPtr _pen;
-
-        private Point _ptCurrent;
-        bool[,] _cells;
-        private int nPenWidth = 1;
-        private NativeMethods.WinPoint _prevPoint;
-        NativeMethods.WinRect wRect;
-        private int MK_LBUTTON = 1;
-        private int MK_RBUTTON = 2;
 
         public AreaFillArea(AreaFillWindow areaFillWindow, IntPtr bgdOcean) : base(bgdOcean)
         {
+            var hm = LoadLibrary("CppLib.dll");
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_NCHITTEST);
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_MOUSEMOVE);
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_LBUTTONDOWN);
@@ -573,6 +575,93 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
             }
         }
+        static class HResult
+        {
+            public const int S_OK = 0;
+            public const int S_FALSE = 1;
+            public const int E_FAIL = unchecked((int)0x80004005);
+        }
+        internal delegate int DllGetClassObject(
+            [In, MarshalAs(UnmanagedType.LPStruct)] Guid ClassId,
+            [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+            out IntPtr ppvObject);
+
+        delegate int CanUnloadNowRoutine();
+        CanUnloadNowRoutine _deldllCanUnloadNow;
+
+        IntPtr _hModule = IntPtr.Zero;
+        /// <summary>Creates com object with the given clsid in the specified file</summary>
+        /// <param name="fnameComClass">The path of the module</param>
+        /// <param name="clsidOfComObj">The CLSID of the com object</param>
+        /// <param name="riid">The IID of the interface requested</param>
+        /// <param name="pvObject">The interface pointer. Upon failure pvObject is IntPtr.Zero</param>
+        /// <returns>An HRESULT</returns>
+        [HandleProcessCorruptedStateExceptions]
+        internal int CoCreateFromFile(string fnameComClass, Guid clsidOfComObj, Guid riid, out IntPtr pvObject)
+        {
+            pvObject = IntPtr.Zero;
+            int hr = HResult.E_FAIL;
+            try
+            {
+                _hModule = LoadLibrary(fnameComClass);
+                if (_hModule != IntPtr.Zero)
+                {
+                    IntPtr optrDllGetClassObject = GetProcAddress(_hModule, "DllGetClassObject");
+                    if (optrDllGetClassObject != IntPtr.Zero)
+                    {
+                        var delDllGetClassObject = Marshal.GetDelegateForFunctionPointer<DllGetClassObject>(optrDllGetClassObject);
+                        var optrDllCanUnloadNow = GetProcAddress(_hModule, "DllCanUnloadNow");
+                        _deldllCanUnloadNow = Marshal.GetDelegateForFunctionPointer<CanUnloadNowRoutine>(optrDllCanUnloadNow);
+
+                        IntPtr pClassFactory = IntPtr.Zero;
+                        Guid iidIUnknown = new Guid(IUnknownGuid);
+                        hr = delDllGetClassObject(clsidOfComObj, iidIUnknown, out pClassFactory);
+                        if (hr == HResult.S_OK)
+                        {
+                            var classFactory = (IClassFactory)Marshal.GetTypedObjectForIUnknown(pClassFactory, typeof(IClassFactory));
+                            hr = classFactory.CreateInstance(IntPtr.Zero, ref riid, out pvObject);
+                            Marshal.ReleaseComObject(classFactory);
+                            Marshal.Release(pClassFactory);
+                        }
+                    }
+                    else
+                    {
+                        hr = Marshal.GetHRForLastWin32Error();
+                        Debug.Assert(false, $"Unable to find DllGetClassObject: {hr}");
+                    }
+                }
+                else
+                {
+                    hr = Marshal.GetHRForLastWin32Error();
+                    Debug.Assert(false, $"Unable to load {fnameComClass}: {hr}");
+                }
+            }
+            catch (Exception ex)
+            {
+                var x = ex.ToString(); // HandleProcessCorruptedStateExceptions
+                throw new InvalidOperationException(x);
+
+            }
+            return hr;
+        }
+
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern IntPtr LoadLibrary(string dllName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern int FreeLibrary(IntPtr handle);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetProcAddress(IntPtr hModule, string procname);
+
+        const string IUnknownGuid = "00000001-0000-0000-C000-000000000046";
+        [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid(IUnknownGuid)]
+        private interface IClassFactory
+        {
+            [PreserveSig]
+            int CreateInstance(IntPtr pUnkOuter, ref Guid riid, out IntPtr ppvObject);
+            int LockServer(int fLock);
+        }
     }
     // the Register For COM Interop is disabled for EXEs, so we need to run regasm <exe> /tlb
     /*
@@ -596,9 +685,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     [ComVisible(true)]
     [Guid("B351FB5A-AB97-4F37-8B72-D8AE7E0ADCA0")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    public interface IAreaFill
+
+    unsafe public interface IAreaFill
     {
-        void DoAreaFill(IntPtr hWnd, Point ArraySize, Point StartPoint);
+        void DoAreaFill(IntPtr hWnd, Point ArraySize, Point StartPoint, int** array);
     }
 
 }
