@@ -261,13 +261,13 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             var guidComClass = new Guid("BB4B9EE1-81DE-400B-A58A-687ED53A02E6");
             var hr = CoCreateFromFile("CppLib.dll", guidComClass, typeof(IAreaFill).GUID, out var pObject);
             var iara = (IAreaFill)Marshal.GetTypedObjectForIUnknown(pObject, typeof(IAreaFill));
-            _cells[0, 1] = 2;
-            _cells[0, 30] = 5;
+            _cells[_ptStartFill.X, _ptStartFill.Y] = 0;
             fixed (byte* arr = _cells)
             {
                 iara.DoAreaFill(_hwnd, new Point(nTotCols, nTotRows), _ptStartFill, DepthFirst, arr);
 
             }
+            Marshal.ReleaseComObject(iara);
             FreeLibrary(_hModule);
 
         }
