@@ -78,6 +78,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 IsChecked= ""{Binding Path=IsRunning}"" />
             <CheckBox Content=""DepthFirst"" 
                 IsChecked= ""{Binding Path=DepthFirst}"" />
+            <CheckBox Content=""FillViaCPP"" 
+                IsChecked= ""{Binding Path=FillViaCPP}"" />
             <Button Name=""btnErase"" Content=""_Erase""/>
             <Label Content=""CellWidth""/>
             <l:MyTextBox 
@@ -214,7 +216,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         private IntPtr _pen;
 
         private Point _ptCurrent;
-        bool[,] _cells;
+        byte[,] _cells;
         private int nPenWidth = 1;
         private NativeMethods.WinPoint _prevPoint;
         NativeMethods.WinRect wRect;
@@ -222,6 +224,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         private int MK_RBUTTON = 2;
 
         public bool DepthFirst { get; set; }
+        public bool FillViaCPP { get; set; } = true;
 
         int _CellWidth = 1;
         public int CellWidth
@@ -253,6 +256,21 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         private Point _ptStartFill;
 
+        unsafe void DoFillViaCPP()
+        {
+            var guidComClass = new Guid("BB4B9EE1-81DE-400B-A58A-687ED53A02E6");
+            var hr = CoCreateFromFile("CppLib.dll", guidComClass, typeof(IAreaFill).GUID, out var pObject);
+            var iara = (IAreaFill)Marshal.GetTypedObjectForIUnknown(pObject, typeof(IAreaFill));
+            _cells[0, 1] = 2;
+            _cells[0, 30] = 5;
+            fixed (byte* arr = _cells)
+            {
+                iara.DoAreaFill(_hwnd, new Point(nTotCols, nTotRows), _ptStartFill, DepthFirst, arr);
+
+            }
+            FreeLibrary(_hModule);
+
+        }
         public bool IsRunning
         {
             get { return _IsRunning; }
@@ -276,27 +294,34 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         ThreadPool.QueueUserWorkItem((o) =>
                         {
                             try
+
                             {
                                 _IsRunning = true;
                                 _stack = new Stack<Point>();
                                 _queue = new Queue<Point>();
-
-                                if (DepthFirst)
+                                if (FillViaCPP)
                                 {
-                                    _stack.Push(_ptStartFill);
-                                    while (_stack.Count > 0 && !cts.IsCancellationRequested)
-                                    {
-                                        var pt = _stack.Pop();
-                                        DoAreaFill(pt);
-                                    }
+                                    DoFillViaCPP();
                                 }
                                 else
                                 {
-                                    _queue.Enqueue(_ptStartFill);
-                                    while (_queue.Count > 0 && !cts.IsCancellationRequested)
+                                    if (DepthFirst)
                                     {
-                                        var pt = _queue.Dequeue();
-                                        DoAreaFill(pt);
+                                        _stack.Push(_ptStartFill);
+                                        while (_stack.Count > 0 && !cts.IsCancellationRequested)
+                                        {
+                                            var pt = _stack.Pop();
+                                            DoAreaFill(pt);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        _queue.Enqueue(_ptStartFill);
+                                        while (_queue.Count > 0 && !cts.IsCancellationRequested)
+                                        {
+                                            var pt = _queue.Dequeue();
+                                            DoAreaFill(pt);
+                                        }
                                     }
                                 }
                             }
@@ -322,7 +347,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         public AreaFillArea(AreaFillWindow areaFillWindow, IntPtr bgdOcean) : base(bgdOcean)
         {
-            var hm = LoadLibrary("CppLib.dll");
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_NCHITTEST);
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_MOUSEMOVE);
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_LBUTTONDOWN);
@@ -367,7 +391,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             nTotRows = (int)(this.ActualHeight * yScale / CellHeight);
             nTotCols = (int)(this.ActualWidth * xScale / CellWidth);
-            _cells = new bool[nTotCols, nTotRows];
+            _cells = new byte[nTotCols, nTotRows];
             if (_hdc != IntPtr.Zero)
             {
                 NativeMethods.ReleaseDC(_hwnd, _hdc);
@@ -414,7 +438,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             bool didDraw = false;
             if (pt.X >= 0 && pt.X < _cells.GetLength(0) && pt.Y >= 0 && pt.Y < _cells.GetLength(1))
             {
-                if (!_cells[pt.X, pt.Y])
+                if (_cells[pt.X, pt.Y] == 0)
                 {
                     _oColor = (_oColor + 140) & 0xffffff;
                     //                    _pen = NativeMethods.CreatePen(nPenStyle: 0, nWidth: nPenWidth, nColor: (IntPtr)_oColor);
@@ -444,7 +468,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     //NativeMethods.LineTo(hdc, pt.X, pt.Y);
                     //NativeMethods.DeleteObject(_pen);
                     //_ptOld = pt;
-                    _cells[pt.X, pt.Y] = true;
+                    _cells[pt.X, pt.Y] = 1;
                     didDraw = true;
                 }
             }
@@ -555,7 +579,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             if (IsValidPoint(ptCurrent))
             {
-                if (!_cells[ptCurrent.X, ptCurrent.Y])
+                if (_cells[ptCurrent.X, ptCurrent.Y] == 0)
                 {
                     DrawACell(ptCurrent);
                     if (this.DepthFirst)
@@ -688,7 +712,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
     unsafe public interface IAreaFill
     {
-        void DoAreaFill(IntPtr hWnd, Point ArraySize, Point StartPoint, int** array);
+        void DoAreaFill(IntPtr hWnd, Point ArraySize, Point StartPoint, bool DepthFirst, byte* array);
     }
 
 }
