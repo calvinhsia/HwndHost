@@ -256,20 +256,25 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         private Point _ptStartFill;
 
-        unsafe void DoFillViaCPP()
+        unsafe void DoFillViaCPP(CancellationTokenSource cts)
         {
-            var guidComClass = new Guid("BB4B9EE1-81DE-400B-A58A-687ED53A02E6");
-            var hr = CoCreateFromFile("CppLib.dll", guidComClass, typeof(IAreaFill).GUID, out var pObject);
-            var iara = (IAreaFill)Marshal.GetTypedObjectForIUnknown(pObject, typeof(IAreaFill));
-            _cells[_ptStartFill.X, _ptStartFill.Y] = 0;
-            fixed (byte* arr = _cells)
+            int cancellationRequested = 0;
+            using (var reg = cts.Token.Register(() =>
             {
-                iara.DoAreaFill(_hwnd, new Point(nTotCols, nTotRows), _ptStartFill, DepthFirst, arr);
-
+                cancellationRequested = 1;
+            }))
+            {
+                var guidComClass = new Guid("BB4B9EE1-81DE-400B-A58A-687ED53A02E6");
+                var hr = CoCreateFromFile("CppLib.dll", guidComClass, typeof(IAreaFill).GUID, out var pObject);
+                var iara = (IAreaFill)Marshal.GetTypedObjectForIUnknown(pObject, typeof(IAreaFill));
+                _cells[_ptStartFill.X, _ptStartFill.Y] = 0;
+                fixed (byte* arr = _cells)
+                {
+                    iara.DoAreaFill(_hwnd, new Point(nTotCols, nTotRows), _ptStartFill, DepthFirst, ref cancellationRequested, arr);
+                }
+                Marshal.ReleaseComObject(iara);
+                FreeLibrary(_hModule);
             }
-            Marshal.ReleaseComObject(iara);
-            FreeLibrary(_hModule);
-
         }
         public bool IsRunning
         {
@@ -301,7 +306,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 _queue = new Queue<Point>();
                                 if (FillViaCPP)
                                 {
-                                    DoFillViaCPP();
+                                    DoFillViaCPP(cts);
                                 }
                                 else
                                 {
@@ -442,6 +447,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 {
                     _oColor = (_oColor + 140) & 0xffffff;
                     //                    _pen = NativeMethods.CreatePen(nPenStyle: 0, nWidth: nPenWidth, nColor: (IntPtr)_oColor);
+                    //*
+                    NativeMethods.SetPixel(_hdc, pt.X, pt.Y, (IntPtr)_oColor);
+                    /*/
                     var br = NativeMethods.CreateSolidBrush((IntPtr)_oColor);
                     wRect.Left = pt.X;
                     wRect.Right = pt.X + _CellWidth;
@@ -450,24 +458,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
                     NativeMethods.FillRect(_hdc, ref wRect, br);
                     NativeMethods.DeleteObject(br);
+                     //*/
 
-                    //m_oColor = SD.Color.FromArgb((int)(((((uint)m_oColor.ToArgb() & 0xffffff) + 140) & 0xffffff) | 0xff000000));
-                    //m_brushFill = new SolidBrush(m_oColor);
-                    //var g = Graphics.FromHwnd(_hwnd);
-                    //m_oGraphics.FillRectangle(br,
-                    //    m_Offset.Width + ptcell.X * m_cellSize.Width,
-                    //    m_Offset.Height + ptcell.Y * m_cellSize.Height,
-                    //    m_cellSize.Width,
-                    //    m_cellSize.Height);
-
-                    //NativeMethods.SelectObject(hdc, _pen);
-                    //if (_ptOld.HasValue)
-                    //{
-                    //    NativeMethods.MoveToEx(hdc, _ptOld.Value.X, _ptOld.Value.Y, ref _prevPoint);
-                    //}
-                    //NativeMethods.LineTo(hdc, pt.X, pt.Y);
-                    //NativeMethods.DeleteObject(_pen);
-                    //_ptOld = pt;
                     _cells[pt.X, pt.Y] = 1;
                     didDraw = true;
                 }
@@ -709,10 +701,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     [ComVisible(true)]
     [Guid("B351FB5A-AB97-4F37-8B72-D8AE7E0ADCA0")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-
     unsafe public interface IAreaFill
     {
-        void DoAreaFill(IntPtr hWnd, Point ArraySize, Point StartPoint, bool DepthFirst, byte* array);
+        void DoAreaFill(IntPtr hWnd, Point ArraySize, Point StartPoint, bool DepthFirst, ref int pIsCancellationRequested, byte* array);
     }
 
 }

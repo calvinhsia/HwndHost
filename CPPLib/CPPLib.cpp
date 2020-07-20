@@ -30,6 +30,7 @@ public:
 		struct Point ArraySize,
 		struct Point StartPoint,
 		VARIANT_BOOL DepthFirst,
+		long *pIsCancellationRequested,
 		BYTE* array)
 	{
 		_depthFirst = DepthFirst;
@@ -42,6 +43,10 @@ public:
 			_queue.push(StartPoint);
 			while (_queue.size() > 0)
 			{
+				if (*pIsCancellationRequested != 0)
+				{
+					break;
+				}
 				Point pt = _queue.front();
 				_queue.pop();
 				DrawCell(pt);
@@ -52,6 +57,10 @@ public:
 			_stack.push(StartPoint);
 			while (_stack.size() > 0)
 			{
+				if (*pIsCancellationRequested != 0)
+				{
+					break;
+				}
 				Point pt = _stack.top();
 				_stack.pop();
 				DrawCell(pt);
