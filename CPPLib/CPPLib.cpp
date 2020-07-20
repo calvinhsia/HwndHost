@@ -25,6 +25,10 @@ public:
 	END_COM_MAP()
 	DECLARE_NOT_AGGREGATABLE(MyAreaFill)
 	DECLARE_NO_REGISTRY()
+	MyAreaFill()
+	{
+
+	}
 	HRESULT __stdcall raw_DoAreaFill(
 		long hWnd,
 		struct Point ArraySize,
@@ -37,7 +41,6 @@ public:
 		_ArraySize = ArraySize;
 		_cells = array;
 		_hdc = GetDC((HWND)hWnd);
-
 		if (DepthFirst == FALSE)
 		{
 			_queue.push(StartPoint);
@@ -158,6 +161,7 @@ STDAPI DllGetClassObject(__in REFCLSID rclsid, __in REFIID riid, __deref_out LPV
 //tell the linker to export the function
 #pragma comment(linker, "/EXPORT:DllGetClassObject=_DllGetClassObject@12,PRIVATE")
 
+__control_entrypoint(DllExport)
 STDAPI DllCanUnloadNow()
 {
 	return S_OK;

@@ -195,13 +195,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public event PropertyChangedEventHandler PropertyChanged;
         void RaisePropChanged([CallerMemberName] string propName = "")
         {
-            if (PropertyChanged != null)
-            {
-                PropertyChanged(this, new PropertyChangedEventArgs(propName));
-            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propName));
         }
-        private AreaFillWindow _areaFillWindow;
-        private IntPtr _bgdOcean;
+        private readonly AreaFillWindow _areaFillWindow;
+        private readonly IntPtr _bgdOcean;
         CancellationTokenSource cts;
         TaskCompletionSource<int> tcs;
         bool _IsRunning = false;
@@ -213,15 +210,11 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public bool _fPenDown { get; private set; }
 
         int _oColor = 0xffffff;
-        private IntPtr _pen;
 
         private Point _ptCurrent;
         byte[,] _cells;
-        private int nPenWidth = 1;
-        private NativeMethods.WinPoint _prevPoint;
-        NativeMethods.WinRect wRect;
-        private int MK_LBUTTON = 1;
-        private int MK_RBUTTON = 2;
+        private const int MK_LBUTTON = 1;
+//        private const int MK_RBUTTON = 2;
 
         public bool DepthFirst { get; set; }
         public bool FillViaCPP { get; set; } = true;
@@ -241,7 +234,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
         private int _nTotRows;
         private int _nTotCols;
-        private bool _penModeDrag = true;
 
         public int nTotRows
         {
@@ -267,12 +259,13 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 var guidComClass = new Guid("BB4B9EE1-81DE-400B-A58A-687ED53A02E6");
                 var hr = CoCreateFromFile("CppLib.dll", guidComClass, typeof(IAreaFill).GUID, out var pObject);
                 var iara = (IAreaFill)Marshal.GetTypedObjectForIUnknown(pObject, typeof(IAreaFill));
-                _cells[_ptStartFill.X, _ptStartFill.Y] = 0;
                 fixed (byte* arr = _cells)
                 {
                     iara.DoAreaFill(_hwnd, new Point(nTotCols, nTotRows), _ptStartFill, DepthFirst, ref cancellationRequested, arr);
                 }
                 Marshal.ReleaseComObject(iara);
+                GC.Collect();
+                Marshal.CleanupUnusedObjectsInCurrentContext();
                 FreeLibrary(_hModule);
             }
         }
@@ -433,11 +426,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             return new Point((int)(pt.X * xScale), (int)(pt.Y * yScale));
         }
-        void DrawLine(Point pt1, Point pt2)
-        {
-
-        }
-
         bool DrawACell(Point pt)
         {
             bool didDraw = false;
