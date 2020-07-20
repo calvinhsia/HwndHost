@@ -214,7 +214,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         private Point _ptCurrent;
         byte[,] _cells;
         private const int MK_LBUTTON = 1;
-//        private const int MK_RBUTTON = 2;
+        //        private const int MK_RBUTTON = 2;
 
         public bool DepthFirst { get; set; }
         public bool FillViaCPP { get; set; } = true;
@@ -261,7 +261,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 var iara = (IAreaFill)Marshal.GetTypedObjectForIUnknown(pObject, typeof(IAreaFill));
                 fixed (byte* arr = _cells)
                 {
-                    iara.DoAreaFill(_hwnd, new Point(nTotCols, nTotRows), _ptStartFill, DepthFirst, ref cancellationRequested, arr);
+                    AreaFillData areaFillData = new AreaFillData()
+                    {
+                        hWnd = _hwnd,
+                        ArraySize = new Point(nTotCols, nTotRows),
+                        StartPoint = _ptStartFill,
+                        DepthFirst = DepthFirst
+                    };
+                    iara.DoAreaFill(areaFillData, ref cancellationRequested, arr);
                 }
                 Marshal.ReleaseComObject(iara);
                 GC.Collect();
@@ -685,13 +692,22 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public int X;
         public int Y;
     }
+    [ComVisible(true)]
+    [Guid("94D86FC9-57BC-402C-8E77-6F8EFD49B851")]
+    public struct AreaFillData
+    {
+        public Point StartPoint;
+        public Point ArraySize;
+        public IntPtr hWnd;
+        public bool DepthFirst;
+    }
 
     [ComVisible(true)]
     [Guid("B351FB5A-AB97-4F37-8B72-D8AE7E0ADCA0")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     unsafe public interface IAreaFill
     {
-        void DoAreaFill(IntPtr hWnd, Point ArraySize, Point StartPoint, bool DepthFirst, ref int pIsCancellationRequested, byte* array);
+        void DoAreaFill(AreaFillData areaFillData, ref int pIsCancellationRequested, byte* array);
     }
 
 }

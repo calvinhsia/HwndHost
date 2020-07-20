@@ -25,25 +25,17 @@ public:
 	END_COM_MAP()
 	DECLARE_NOT_AGGREGATABLE(MyAreaFill)
 	DECLARE_NO_REGISTRY()
-	MyAreaFill()
-	{
-
-	}
 	HRESULT __stdcall raw_DoAreaFill(
-		long hWnd,
-		struct Point ArraySize,
-		struct Point StartPoint,
-		VARIANT_BOOL DepthFirst,
+		AreaFillData areaFillData,
 		long *pIsCancellationRequested,
 		BYTE* array)
 	{
-		_depthFirst = DepthFirst;
-		_ArraySize = ArraySize;
+		_areaFillData = areaFillData;
+		_hdc = GetDC((HWND)areaFillData.hWnd);
 		_cells = array;
-		_hdc = GetDC((HWND)hWnd);
-		if (DepthFirst == FALSE)
+		if (areaFillData.DepthFirst == VARIANT_FALSE)
 		{
-			_queue.push(StartPoint);
+			_queue.push(areaFillData.StartPoint);
 			while (_queue.size() > 0)
 			{
 				if (*pIsCancellationRequested != 0)
@@ -57,7 +49,7 @@ public:
 		}
 		else
 		{
-			_stack.push(StartPoint);
+			_stack.push(areaFillData.StartPoint);
 			while (_stack.size() > 0)
 			{
 				if (*pIsCancellationRequested != 0)
@@ -69,21 +61,22 @@ public:
 				DrawCell(pt);
 			}
 		}
-		ReleaseDC((HWND)hWnd, _hdc);
+		ReleaseDC((HWND)areaFillData.hWnd, _hdc);
 		return S_OK;
 	}
 private:
-	Point _ArraySize;
+	AreaFillData _areaFillData;
 	HDC _hdc;
 	RECT _rect;
 	BYTE* _cells;
-	VARIANT_BOOL _depthFirst;
 	COLORREF color = 0xffffff;
+	stack<Point> _stack;
+	queue<Point> _queue;
 	void DrawCell(Point pt)
 	{
-		if (pt.X >= 0 && pt.X < _ArraySize.X && pt.Y >= 0 && pt.Y < _ArraySize.Y)
+		if (pt.X >= 0 && pt.X < _areaFillData.ArraySize.X && pt.Y >= 0 && pt.Y < _areaFillData.ArraySize.Y)
 		{
-			auto ndx = pt.X * _ArraySize.Y + pt.Y;
+			auto ndx = pt.X * _areaFillData.ArraySize.Y + pt.Y;
 			if (_cells[ndx] == 0)
 			{
 				_cells[ndx] = 1;
@@ -97,7 +90,7 @@ private:
 				//FillRect(_hdc, &_rect, hBr);
 				//DeleteObject(hBr);
 				SetPixel(_hdc, pt.X, pt.Y, color);
-				if (_depthFirst == FALSE)
+				if (_areaFillData.DepthFirst == VARIANT_FALSE)
 				{
 					pt.X--;
 					_queue.push(pt);
@@ -124,8 +117,6 @@ private:
 
 
 	}
-	stack<Point> _stack;
-	queue<Point> _queue;
 };
 
 OBJECT_ENTRY_AUTO(CLSID_AreaFillCPP, MyAreaFill)
