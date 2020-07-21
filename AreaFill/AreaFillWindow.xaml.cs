@@ -206,6 +206,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         private bool _ResetRequired;
         Stack<Point> _stack;
         Queue<Point> _queue;
+        public Random _rand = new Random(1);
+
         public Point? _ptOld { get; private set; }
         public bool _fPenDown { get; private set; }
 
@@ -415,7 +417,74 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
             }
             DoErase();
+            _rand = new Random(2);
+            for (int i = 0; i < 10; i++)
+            {
+                GenSplines(22);
+            }
             //            IsRunning = true;
+        }
+        void GenSplines(int nSeg)
+        {
+            Vector3 p0 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            Vector3 p1= new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            Vector3 p2 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            Vector3 p3 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            //DrawACell(p0.toPoint());
+            //DrawACell(p1.toPoint());
+            //DrawACell(p2.toPoint());
+            //DrawLineOfCells(p0.toPoint(), p1.toPoint());
+            //DrawLineOfCells(p1.toPoint(), p2.toPoint());
+            //DrawLineOfCells(p2.toPoint(), p3.toPoint());
+
+            var q0 = CalculateBezierPoint(0, p0, p1, p2, p3);
+            for (int i = 1; i <= nSeg; i++)
+            {
+                var t = i / (double)nSeg;
+                var q1 = CalculateBezierPoint(t, p0, p1, p2, p3);
+                DrawLineOfCells(q0.toPoint(), q1.toPoint());
+                q0 = q1;
+
+            }
+        }
+        Vector3 CalculateBezierPoint(double t, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
+        {
+            double u = 1 - t;
+            double tt = t * t;
+            double uu = u * u;
+            double uuu = uu * u;
+            double ttt = tt * t;
+            Vector3 p = uuu * p0; //first term
+            p += 3 * uu * t * p1; //second term
+            p += 3 * u * tt * p2; //third term
+            p += ttt * p3; //fourth term
+            return p;
+        }
+        class PointD
+        {
+            public double _X;
+            public double _Y;
+        }
+        class Vector3 : PointD
+        {
+            public Vector3(double X, double Y)
+            {
+                _X = X;
+                _Y = Y;
+            }
+            public static Vector3 operator *(double f, Vector3 v) => new Vector3(f * v._X, f * v._Y);
+            public static Vector3 operator +(Vector3 v1, Vector3 v2) => new Vector3(v1._X + v2._X, v1._Y + v2._Y);
+            public Point toPoint() => new Point((int)_X, (int)_Y);
+            public override string ToString()
+            {
+                return $"{_X:n0},{_Y:n0}";
+            }
+        }
+        List<Point> Interpolate(List<Point> ptSegments, double scale)
+        {
+            var ptControls = new List<Point>();
+            return ptControls;
+
         }
         public void DoErase()
         {
