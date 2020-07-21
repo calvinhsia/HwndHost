@@ -81,6 +81,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             <CheckBox Content=""FillViaCPP"" 
                 IsChecked= ""{Binding Path=FillViaCPP}"" />
             <Button Name=""btnErase"" Content=""_Erase""/>
+            <Label Content=""NumPts""/>
+            <l:MyTextBox 
+                Text =""{Binding Path=NumPts}"" 
+                ToolTip=""NumPts"" />
+            <Label Content=""NumSegs""/>
+            <l:MyTextBox 
+                Text =""{Binding Path=NumSegs}"" 
+                ToolTip=""NumSegs"" />
             <Label Content=""CellWidth""/>
             <l:MyTextBox 
                 Text =""{Binding Path=CellWidth}"" 
@@ -220,6 +228,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         public bool DepthFirst { get; set; }
         public bool FillViaCPP { get; set; } = true;
+
+        public int NumPts { get; set; } = 10;
+        public int NumSegs { get; set; } = 5;
 
         int _CellWidth = 1;
         public int CellWidth
@@ -404,38 +415,75 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 NativeMethods.ReleaseDC(_hwnd, _hdc);
             }
             _hdc = NativeMethods.GetDC(_hwnd);
+            var lstStartPoints = new List<Vector>();
+            for (int i = 0; i < NumPts; i++)
+            {
+                lstStartPoints.Add(new Vector(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows));
+            }
+            var lstInterpolate = BezierInterpolate(lstStartPoints, 1);
+            BezierPath(nSeg: 10, ctrlPoints: lstInterpolate);
+
+            //            var lstPts = BezierPath(nSeg: 10, ctrlPoints: lstStartPoints);
+            //for (int i = 0; i < 10; i++)
+            //{
+            //    GenSplines(22);
+            //}
+
+
+        }
+        List<Vector> BezierInterpolate(List<Vector> SegPts, double scale)
+        {
+            var ctrlPoints = new List<Vector>();
+            if (SegPts.Count > 2)
+            {
+                for (int i = 0; i < SegPts.Count; i++)
+                {
+                    if (i == 0)
+                    {
+                        var p1 = SegPts[i];
+                        var p2 = SegPts[i + 1];
+                        var tangent = p2 - p1;
+                        var q1 = p1 + scale * tangent;
+                        ctrlPoints.Add(p1);
+                        ctrlPoints.Add(q1);
+                    }
+                    else if (i == SegPts.Count - 1)
+                    {
+                        var p0 = SegPts[i - 1];
+                        var p1 = SegPts[i];
+                        var tangent = p1 - p0;
+                        var q0 = p1 - scale * tangent;
+                        ctrlPoints.Add(q0);
+                        ctrlPoints.Add(p1);
+                    }
+                    else
+                    {
+                        var p0 = SegPts[i - 1];
+                        var p1 = SegPts[i];
+                        var p2 = SegPts[i + 1];
+                        var tangent = (p1 - p0).Normalized();
+                        var q0 = p1 - scale * (p1 - p0).Magnitude() * tangent;
+                        var q1 = p1 + scale * (p2 - p1).Magnitude() * tangent;
+                        ctrlPoints.Add(q0);
+                        ctrlPoints.Add(p1);
+                        ctrlPoints.Add(q1);
+                    }
+                }
+            }
+            return ctrlPoints;
         }
 
         public override void OnReady(IntPtr hwnd)
         {
             DoErase();
-            for (int i = 0; i < 10; i++)
-            {
-                for (int j = 0; j < 100; j++)
-                {
-                    DrawACell(new Point(i, j));
-                }
-            }
-            DoErase();
-            _rand = new Random();
-            var lstCtrlPoints = new List<Vector3>();
-            for (int i = 0; i < 30; i++)
-            {
-                lstCtrlPoints.Add(new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows));
-            }
-            var lstPts = BezierPath(nSeg: 10, ctrlPoints: lstCtrlPoints);
-            //for (int i = 0; i < 10; i++)
-            //{
-            //    GenSplines(22);
-            //}
             //            IsRunning = true;
         }
         void GenSplines(int nSeg)
         {
-            Vector3 p0 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
-            Vector3 p1 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
-            Vector3 p2 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
-            Vector3 p3 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            Vector p0 = new Vector(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            Vector p1 = new Vector(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            Vector p2 = new Vector(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            Vector p3 = new Vector(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
             //DrawACell(p0.toPoint());
             //DrawACell(p1.toPoint());
             //DrawACell(p2.toPoint());
@@ -448,20 +496,20 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 var t = i / (double)nSeg;
                 var q1 = CalculateBezierPoint(t, p0, p1, p2, p3);
-                DrawLineOfCells(q0.toPoint(), q1.toPoint());
+                DrawLineOfCells(q0.ToPoint(), q1.ToPoint());
                 q0 = q1;
             }
         }
-        List<Vector3> BezierPath(int nSeg, List<Vector3> ctrlPoints)
+        List<Vector> BezierPath(int nSeg, List<Vector> ctrlPoints)
         {
-            List<Vector3> drawingPoints = new List<Vector3>();
-            Vector3 q0 = null;
+            List<Vector> drawingPoints = new List<Vector>();
+            Vector q0 = null;
             for (int i = 0; i < ctrlPoints.Count() - 3; i += 3)
             {
-                Vector3 p0 = ctrlPoints[i];
-                Vector3 p1 = ctrlPoints[i + 1];
-                Vector3 p2 = ctrlPoints[i + 2];
-                Vector3 p3 = ctrlPoints[i + 3];
+                Vector p0 = ctrlPoints[i];
+                Vector p1 = ctrlPoints[i + 1];
+                Vector p2 = ctrlPoints[i + 2];
+                Vector p3 = ctrlPoints[i + 3];
                 if (i == 0)
                 {
                     q0 = CalculateBezierPoint(0, p0, p1, p2, p3);
@@ -472,23 +520,26 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     var t = j / (double)nSeg;
                     var q1 = CalculateBezierPoint(t, p0, p1, p2, p3);
                     drawingPoints.Add(q1);
-                    DrawLineOfCells(q0.toPoint(), q1.toPoint());
+                    DrawLineOfCells(q0.ToPoint(), q1.ToPoint());
                     q0 = q1;
                 }
             }
             return drawingPoints;
         }
-        Vector3 CalculateBezierPoint(double t, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
+        /// <summary>
+        /// P = (1 - t)^3 * P0 + 3 (1 - t)^2 * t * P1 + 3(1 - t)*t^2 * P2 + t^3 * P3
+        /// </summary>
+        Vector CalculateBezierPoint(double t, Vector p0, Vector p1, Vector p2, Vector p3)
         {
-            double u = 1 - t;
-            double tt = t * t;
-            double uu = u * u;
-            double uuu = uu * u;
-            double ttt = tt * t;
-            Vector3 p = uuu * p0; //first term
-            p += 3 * uu * t * p1; //second term
-            p += 3 * u * tt * p2; //third term
-            p += ttt * p3; //fourth term
+            double oneMinusT = 1 - t;
+            double tSquared = t * t;
+            double oneMinusTSquared = oneMinusT * oneMinusT;
+            double oneMinusTCubed = oneMinusTSquared * oneMinusT;
+            double tCubed = tSquared * t;
+            Vector p = oneMinusTCubed * p0;
+            p += 3 * oneMinusTSquared * t * p1;
+            p += 3 * oneMinusT * tSquared * p2;
+            p += tCubed * p3;
             return p;
         }
         class PointD
@@ -496,16 +547,30 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             public double _X;
             public double _Y;
         }
-        class Vector3 : PointD
+        class Vector : PointD
         {
-            public Vector3(double X, double Y)
+            public Vector(double X, double Y)
             {
                 _X = X;
                 _Y = Y;
             }
-            public static Vector3 operator *(double f, Vector3 v) => new Vector3(f * v._X, f * v._Y);
-            public static Vector3 operator +(Vector3 v1, Vector3 v2) => new Vector3(v1._X + v2._X, v1._Y + v2._Y);
-            public Point toPoint() => new Point((int)_X, (int)_Y);
+            public static Vector operator *(double f, Vector v) => new Vector(f * v._X, f * v._Y);
+            public static Vector operator +(Vector v1, Vector v2) => new Vector(v1._X + v2._X, v1._Y + v2._Y);
+            public static Vector operator -(Vector v1, Vector v2) => new Vector(v2._X - v1._X, v2._Y - v1._Y);
+            public double Magnitude()
+            {
+                return Math.Sqrt(_X * _X + _Y * _Y);
+            }
+            public Vector Normalized()
+            {
+                var mag = Magnitude();
+                if (mag != 0)
+                {
+                    return new Vector(_X / mag, _Y / mag);
+                }
+                return new Vector(0, 0);
+            }
+            public Point ToPoint() => new Point((int)_X, (int)_Y);
             public override string ToString()
             {
                 return $"{_X:n0},{_Y:n0}";
