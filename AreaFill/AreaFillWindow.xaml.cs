@@ -417,17 +417,23 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
             }
             DoErase();
-            _rand = new Random(2);
-            for (int i = 0; i < 10; i++)
+            _rand = new Random();
+            var lstCtrlPoints = new List<Vector3>();
+            for (int i = 0; i < 30; i++)
             {
-                GenSplines(22);
+                lstCtrlPoints.Add(new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows));
             }
+            var lstPts = BezierPath(nSeg: 10, ctrlPoints: lstCtrlPoints);
+            //for (int i = 0; i < 10; i++)
+            //{
+            //    GenSplines(22);
+            //}
             //            IsRunning = true;
         }
         void GenSplines(int nSeg)
         {
             Vector3 p0 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
-            Vector3 p1= new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            Vector3 p1 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
             Vector3 p2 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
             Vector3 p3 = new Vector3(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
             //DrawACell(p0.toPoint());
@@ -444,8 +450,33 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 var q1 = CalculateBezierPoint(t, p0, p1, p2, p3);
                 DrawLineOfCells(q0.toPoint(), q1.toPoint());
                 q0 = q1;
-
             }
+        }
+        List<Vector3> BezierPath(int nSeg, List<Vector3> ctrlPoints)
+        {
+            List<Vector3> drawingPoints = new List<Vector3>();
+            Vector3 q0 = null;
+            for (int i = 0; i < ctrlPoints.Count() - 3; i += 3)
+            {
+                Vector3 p0 = ctrlPoints[i];
+                Vector3 p1 = ctrlPoints[i + 1];
+                Vector3 p2 = ctrlPoints[i + 2];
+                Vector3 p3 = ctrlPoints[i + 3];
+                if (i == 0)
+                {
+                    q0 = CalculateBezierPoint(0, p0, p1, p2, p3);
+                    drawingPoints.Add(q0);
+                }
+                for (int j = 1; j <= nSeg; j++)
+                {
+                    var t = j / (double)nSeg;
+                    var q1 = CalculateBezierPoint(t, p0, p1, p2, p3);
+                    drawingPoints.Add(q1);
+                    DrawLineOfCells(q0.toPoint(), q1.toPoint());
+                    q0 = q1;
+                }
+            }
+            return drawingPoints;
         }
         Vector3 CalculateBezierPoint(double t, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
         {
