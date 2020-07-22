@@ -76,6 +76,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             >
             <CheckBox Content=""_Running"" 
                 IsChecked= ""{Binding Path=IsRunning}"" />
+            <CheckBox Content=""Gravity"" 
+                IsChecked= ""{Binding Path=Gravity}"" ToolTip=""Use Gravity or Bezier curves"" />
             <CheckBox Content=""DepthFirst"" 
                 IsChecked= ""{Binding Path=DepthFirst}"" />
             <CheckBox Content=""FillViaCPP"" 
@@ -144,7 +146,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
                 _tbxStatus = (TextBox)grid.FindName("tbxStatus");
                 var btnErase = (Button)grid.FindName("btnErase");
-                btnErase.Click += (o, ee) => { areaFillArea.DoErase(); };
+                btnErase.Click += (o, ee) => { UpdateBindings(this); areaFillArea.DoErase(); };
                 var userCtrl = (UserControl)grid.FindName("MyUserControl");
                 userCtrl.Content = areaFillArea;
                 this.Content = grid;
@@ -185,6 +187,16 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 this.Content = ex.ToString();
             }
         }
+        internal static void UpdateBindings(FrameworkElement element)
+        {
+            // hotkey doesn't update binding, so we need to update
+            //http://social.msdn.microsoft.com/Forums/vstudio/en-US/e75a6449-1f40-463c-a251-12d317350bf2/textbox-focus-databinding-and-hotkeys?forum=wpf
+            var bindings = BindingOperations.GetSourceUpdatingBindings(element); // get all bindings
+            foreach (var b in bindings)
+            {
+                b.UpdateSource();
+            }
+        }
     }
     // a textbox that selects all when focused:
     public class MyTextBox : TextBox
@@ -216,8 +228,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         Queue<Point> _queue;
         public Random _rand = new Random(1);
 
-        public Point? _ptOld { get; private set; }
-        public bool _fPenDown { get; private set; }
+        public Point? _ptOld { get; set; }
+        public bool Gravity { get; set; }
 
         int _oColor = 0xffffff;
 
@@ -415,26 +427,78 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 NativeMethods.ReleaseDC(_hwnd, _hdc);
             }
             _hdc = NativeMethods.GetDC(_hwnd);
+            if (Gravity)
+            {
+                DrawGravityLines();
+
+            }
+            else
+            {
+                DrawBezierLines();
+            }
+        }
+
+        private void DrawGravityLines() // https://github.com/calvinhsia/Cartoon
+        {
+            var fForce = _nTotCols / 5;
+            var InitSpeed = 10;
+            var wallBound = 15;
+            var pos0 = new Vector(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows);
+            var startPos = pos0;
+            var vel = new Vector(_rand.NextDouble() * InitSpeed, _rand.NextDouble() * InitSpeed);
+            for (int nSeg = 0; nSeg < NumSegs; nSeg++)
+            {
+                var pos1 = pos0 + vel;
+                DrawLineOfCells(pos0.ToPoint(), pos1.ToPoint());
+//                DrawACell(pos1.ToPoint(), MakeVisible: true);
+                var dWest = Math.Max(pos1._X, wallBound);
+                var accWest = fForce / dWest / dWest;
+                var dEast = Math.Max(_nTotCols - pos1._X, wallBound);
+                var accEast = -fForce / dEast / dEast;
+                var dNorth = Math.Max(pos1._Y, wallBound);
+                var accNorth = fForce / dNorth / dNorth;
+                var dSouth = Math.Max(_nTotRows - pos1._Y, wallBound);
+                var accSouth = -fForce / dSouth / dSouth;
+                var accEastWest = (accEast + accWest) * _rand.NextDouble() * 20;
+                var accNothSoutch = (accNorth + accSouth) * _rand.NextDouble() * 20;
+                var acc = new Vector(accEastWest, accNothSoutch);
+                vel += acc;
+                pos0 = pos1;
+            }
+        }
+
+        private void DrawBezierLines()
+        {
             var lstStartPoints = new List<Vector>();
+            //            _rand = new Random(1);
             for (int i = 0; i < NumPts; i++)
             {
                 lstStartPoints.Add(new Vector(_rand.NextDouble() * _nTotCols, _rand.NextDouble() * _nTotRows));
             }
-            var lstInterpolate = BezierInterpolate(lstStartPoints, 1);
-            BezierPath(nSeg: 10, ctrlPoints: lstInterpolate);
+            //lstStartPoints.Clear();
+            //lstStartPoints.Add(new Vector(800, 1100));
+            //lstStartPoints.Add(new Vector(1300, 1100));
+            //lstStartPoints.Add(new Vector(1300, 1200));
+            //lstStartPoints.Add(new Vector(800, 1400));
+            //foreach (var pt in lstStartPoints)
+            //{
+            //    DrawACell(pt.ToPoint(), MakeVisible: true);
+            //}
+            BezierPath(nSeg: NumSegs, ctrlPoints: lstStartPoints);
+            var lstInterpolate = BezierInterpolate(lstStartPoints, 0.5);
+            BezierPath(nSeg: NumSegs, ctrlPoints: lstInterpolate);
 
             //            var lstPts = BezierPath(nSeg: 10, ctrlPoints: lstStartPoints);
             //for (int i = 0; i < 10; i++)
             //{
             //    GenSplines(22);
             //}
-
-
         }
+
         List<Vector> BezierInterpolate(List<Vector> SegPts, double scale)
         {
             var ctrlPoints = new List<Vector>();
-            if (SegPts.Count > 2)
+            if (SegPts.Count >= 2)
             {
                 for (int i = 0; i < SegPts.Count; i++)
                 {
@@ -442,19 +506,23 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     {
                         var p1 = SegPts[i];
                         var p2 = SegPts[i + 1];
-                        var tangent = p2 - p1;
+                        var tangent = (p2 - p1);
                         var q1 = p1 + scale * tangent;
                         ctrlPoints.Add(p1);
                         ctrlPoints.Add(q1);
+                        //DrawACell(p1.ToPoint(), MakeVisible: true);
+                        //DrawACell(q1.ToPoint(), MakeVisible: true);
                     }
                     else if (i == SegPts.Count - 1)
                     {
                         var p0 = SegPts[i - 1];
                         var p1 = SegPts[i];
-                        var tangent = p1 - p0;
+                        var tangent = (p1 - p0);
                         var q0 = p1 - scale * tangent;
                         ctrlPoints.Add(q0);
                         ctrlPoints.Add(p1);
+                        //DrawACell(q0.ToPoint(), MakeVisible: true);
+                        //DrawACell(p1.ToPoint(), MakeVisible: true);
                     }
                     else
                     {
@@ -462,11 +530,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         var p1 = SegPts[i];
                         var p2 = SegPts[i + 1];
                         var tangent = (p1 - p0).Normalized();
-                        var q0 = p1 - scale * (p1 - p0).Magnitude() * tangent;
-                        var q1 = p1 + scale * (p2 - p1).Magnitude() * tangent;
+                        var q0 = p1 - scale * tangent * ((p1 - p0).Magnitude());
+                        var q1 = p1 + scale * tangent * ((p2 - p1).Magnitude());
                         ctrlPoints.Add(q0);
                         ctrlPoints.Add(p1);
                         ctrlPoints.Add(q1);
+                        //DrawACell(q0.ToPoint(), MakeVisible: true);
+                        //DrawACell(p1.ToPoint(), MakeVisible: true);
+                        //DrawACell(q1.ToPoint(), MakeVisible: true);
                     }
                 }
             }
@@ -555,8 +626,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 _Y = Y;
             }
             public static Vector operator *(double f, Vector v) => new Vector(f * v._X, f * v._Y);
+            public static Vector operator *(Vector v, double f) => new Vector(f * v._X, f * v._Y);
             public static Vector operator +(Vector v1, Vector v2) => new Vector(v1._X + v2._X, v1._Y + v2._Y);
-            public static Vector operator -(Vector v1, Vector v2) => new Vector(v2._X - v1._X, v2._Y - v1._Y);
+            public static Vector operator -(Vector v1, Vector v2) => new Vector(v1._X - v2._X, v1._Y - v2._Y);
             public double Magnitude()
             {
                 return Math.Sqrt(_X * _X + _Y * _Y);
@@ -573,7 +645,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             public Point ToPoint() => new Point((int)_X, (int)_Y);
             public override string ToString()
             {
-                return $"{_X:n0},{_Y:n0}";
+                return $"{_X:f0},{_Y:f0}";
             }
         }
         List<Point> Interpolate(List<Point> ptSegments, double scale)
@@ -598,7 +670,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             return new Point((int)(pt.X * xScale), (int)(pt.Y * yScale));
         }
-        bool DrawACell(Point pt)
+        bool DrawACell(Point pt, bool MakeVisible = false)
         {
             bool didDraw = false;
             if (pt.X >= 0 && pt.X < _cells.GetLength(0) && pt.Y >= 0 && pt.Y < _cells.GetLength(1))
@@ -609,6 +681,16 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     //                    _pen = NativeMethods.CreatePen(nPenStyle: 0, nWidth: nPenWidth, nColor: (IntPtr)_oColor);
                     //*
                     NativeMethods.SetPixel(_hdc, pt.X, pt.Y, (IntPtr)_oColor);
+                    if (MakeVisible)
+                    {
+                        for (int i = 1; i < 10; i++)
+                        {
+                            for (int j = 1; j < 10; j++)
+                            {
+                                NativeMethods.SetPixel(_hdc, pt.X + i, pt.Y + j, (IntPtr)_oColor);
+                            }
+                        }
+                    }
                     /*/
                     var br = NativeMethods.CreateSolidBrush((IntPtr)_oColor);
                     wRect.Left = pt.X;
@@ -626,7 +708,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             }
             return didDraw;
         }
-        void DrawLineOfCells(Point p1, Point p2)
+        void DrawLineOfCells(Point p1, Point p2, bool MakeVisible = false)
         {
             // http://en.wikipedia.org/wiki/Bresenham%27s\_line\_algorithm
             int x0 = p1.X;
@@ -661,7 +743,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 {
                     cx ^= cy; cy ^= cx; cx ^= cy;
                 }
-                DrawACell(new Point(cx, cy));
+                DrawACell(new Point(cx, cy), MakeVisible);
                 //if (drawit(new Point(cx, cy), br))
                 //{
                 //    br = m_brushGenerated;
@@ -856,6 +938,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         }
         public int X;
         public int Y;
+        public override string ToString()
+        {
+            return $"({X},{Y})";
+        }
     }
     [ComVisible(true)]
     [Guid("94D86FC9-57BC-402C-8E77-6F8EFD49B851")]
