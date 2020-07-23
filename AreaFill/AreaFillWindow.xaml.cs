@@ -23,6 +23,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Runtime.ExceptionServices;
+using System.Collections.Concurrent;
 
 namespace AreaFill
 {
@@ -220,12 +221,10 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         private readonly AreaFillWindow _areaFillWindow;
         private readonly IntPtr _bgdOcean;
         CancellationTokenSource cts;
-        TaskCompletionSource<int> tcs;
+        List<Task> _lstTasks;
         bool _IsRunning = false;
         private IntPtr _hdc;
         private bool _ResetRequired;
-        Stack<Point> _stack;
-        Queue<Point> _queue;
         public Random _rand = new Random(1);
 
         public Point? _ptOld { get; set; }
@@ -271,9 +270,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             set { if (_nTotCols != value) { _nTotCols = value; RaisePropChanged(); } }
         }
 
-        private Point _ptStartFill;
 
-        unsafe void DoFillViaCPP(CancellationTokenSource cts)
+        unsafe void DoFillViaCPP(CancellationTokenSource cts, Point ptStartFill)
         {
             int cancellationRequested = 0;
             using (var reg = cts.Token.Register(() =>
@@ -290,7 +288,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     {
                         hWnd = _hwnd,
                         ArraySize = new Point(nTotCols, nTotRows),
-                        StartPoint = _ptStartFill,
+                        StartPoint = ptStartFill,
                         DepthFirst = DepthFirst
                     };
                     iara.DoAreaFill(areaFillData, ref cancellationRequested, arr);
@@ -310,70 +308,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 {
                     if (value) // if we're starting
                     {
-                        if (cts != null)
-                        {
-                            cts.Cancel();
-                            tcs.Task.Wait();
-                        }
-                        if (_ResetRequired)
-                        {
-                            InitWorld();
-                        }
-                        cts = new CancellationTokenSource();
-                        tcs = new TaskCompletionSource<int>();
-                        ThreadPool.QueueUserWorkItem((o) =>
-                        {
-                            try
-
-                            {
-                                _IsRunning = true;
-                                _stack = new Stack<Point>();
-                                _queue = new Queue<Point>();
-                                if (FillViaCPP)
-                                {
-                                    DoFillViaCPP(cts);
-                                }
-                                else
-                                {
-                                    if (DepthFirst)
-                                    {
-                                        _stack.Push(_ptStartFill);
-                                        while (_stack.Count > 0 && !cts.IsCancellationRequested)
-                                        {
-                                            var pt = _stack.Pop();
-                                            DoAreaFill(pt);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        _queue.Enqueue(_ptStartFill);
-                                        while (_queue.Count > 0 && !cts.IsCancellationRequested)
-                                        {
-                                            var pt = _queue.Dequeue();
-                                            DoAreaFill(pt);
-                                        }
-                                    }
-                                }
-                            }
-                            catch (Exception)
-                            {
-                            }
-                            tcs.SetResult(0);
-                            _IsRunning = false;
-                            RaisePropChanged();
-                        }
-                        );
                     }
                     else
                     {// we're stopping
                         cts.Cancel();
+                        Task.WaitAll(_lstTasks.ToArray());
+                        cts = new CancellationTokenSource();
                     }
                     _IsRunning = value;
                     RaisePropChanged();
                 }
             }
         }
-
 
         public AreaFillArea(AreaFillWindow areaFillWindow, IntPtr bgdOcean) : base(bgdOcean)
         {
@@ -437,6 +383,78 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 DrawBezierLines();
             }
         }
+        /// <summary>
+        /// can be called multiple times for multiple start points
+        /// </summary>
+        Task DoAreaFillAsync(Point ptStartFill)
+        {
+            if (_ResetRequired)
+            {
+                InitWorld();
+            }
+            var tcs = new TaskCompletionSource<int>();
+            var tsk = Task.Run(() =>
+            {
+                try
+                {
+                    IsRunning = true;
+                    if (FillViaCPP)
+                    {
+                        DoFillViaCPP(cts, ptStartFill);
+                    }
+                    else
+                    {
+                        var oColor = _oColor;
+                        if (DepthFirst)
+                        {
+                            var stack = new Stack<Point>();
+                            stack.Push(ptStartFill);
+                            while (stack.Count > 0 && !cts.IsCancellationRequested)
+                            {
+                                var ptCurrent = stack.Pop();
+                                if (IsValidPoint(ptCurrent))
+                                {
+                                    if (_cells[ptCurrent.X, ptCurrent.Y] == 0)
+                                    {
+                                        DrawACell(ptCurrent, ref oColor);
+                                        stack.Push(new Point(ptCurrent.X - 1, ptCurrent.Y));
+                                        stack.Push(new Point(ptCurrent.X + 1, ptCurrent.Y));
+                                        stack.Push(new Point(ptCurrent.X, ptCurrent.Y + 1));
+                                        stack.Push(new Point(ptCurrent.X, ptCurrent.Y - 1));
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            var queue = new Queue<Point>();
+                            queue.Enqueue(ptStartFill);
+                            while (queue.Count > 0 && !cts.IsCancellationRequested)
+                            {
+                                var ptCurrent = queue.Dequeue();
+                                if (IsValidPoint(ptCurrent))
+                                {
+                                    if (_cells[ptCurrent.X, ptCurrent.Y] == 0)
+                                    {
+                                        Thread.Sleep(1);
+                                        DrawACell(ptCurrent, ref oColor);
+                                        queue.Enqueue(new Point(ptCurrent.X - 1, ptCurrent.Y));
+                                        queue.Enqueue(new Point(ptCurrent.X + 1, ptCurrent.Y));
+                                        queue.Enqueue(new Point(ptCurrent.X, ptCurrent.Y + 1));
+                                        queue.Enqueue(new Point(ptCurrent.X, ptCurrent.Y - 1));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                }
+                tcs.SetResult(0);
+            });
+            return tsk;
+        }
 
         private void DrawGravityLines() // https://github.com/calvinhsia/Cartoon
         {
@@ -450,7 +468,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             {
                 var pos1 = pos0 + vel;
                 DrawLineOfCells(pos0.ToPoint(), pos1.ToPoint());
-//                DrawACell(pos1.ToPoint(), MakeVisible: true);
+                //                DrawACell(pos1.ToPoint(), MakeVisible: true);
                 var dWest = Math.Max(pos1._X, wallBound);
                 var accWest = fForce / dWest / dWest;
                 var dEast = Math.Max(_nTotCols - pos1._X, wallBound);
@@ -648,12 +666,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 return $"{_X:f0},{_Y:f0}";
             }
         }
-        List<Point> Interpolate(List<Point> ptSegments, double scale)
-        {
-            var ptControls = new List<Point>();
-            return ptControls;
-
-        }
         public void DoErase()
         {
             IsRunning = false;
@@ -670,24 +682,25 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             return new Point((int)(pt.X * xScale), (int)(pt.Y * yScale));
         }
-        bool DrawACell(Point pt, bool MakeVisible = false)
+        bool DrawACell(Point pt, ref int oColor, bool MakeVisible = false)
         {
             bool didDraw = false;
             if (pt.X >= 0 && pt.X < _cells.GetLength(0) && pt.Y >= 0 && pt.Y < _cells.GetLength(1))
             {
                 if (_cells[pt.X, pt.Y] == 0)
                 {
-                    _oColor = (_oColor + 140) & 0xffffff;
+                    _cells[pt.X, pt.Y] = 1;
+                    oColor = (oColor + 140) & 0xffffff;
                     //                    _pen = NativeMethods.CreatePen(nPenStyle: 0, nWidth: nPenWidth, nColor: (IntPtr)_oColor);
                     //*
-                    NativeMethods.SetPixel(_hdc, pt.X, pt.Y, (IntPtr)_oColor);
+                    NativeMethods.SetPixel(_hdc, pt.X, pt.Y, (IntPtr)oColor);
                     if (MakeVisible)
                     {
                         for (int i = 1; i < 10; i++)
                         {
                             for (int j = 1; j < 10; j++)
                             {
-                                NativeMethods.SetPixel(_hdc, pt.X + i, pt.Y + j, (IntPtr)_oColor);
+                                NativeMethods.SetPixel(_hdc, pt.X + i, pt.Y + j, (IntPtr)oColor);
                             }
                         }
                     }
@@ -702,7 +715,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     NativeMethods.DeleteObject(br);
                      //*/
 
-                    _cells[pt.X, pt.Y] = 1;
                     didDraw = true;
                 }
             }
@@ -743,7 +755,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 {
                     cx ^= cy; cy ^= cx; cx ^= cy;
                 }
-                DrawACell(new Point(cx, cy), MakeVisible);
+                DrawACell(new Point(cx, cy), ref _oColor, MakeVisible);
                 //if (drawit(new Point(cx, cy), br))
                 //{
                 //    br = m_brushGenerated;
@@ -791,45 +803,32 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
             }
         }
-        internal void MyOnOnMouseUp(Point ptCurrent, IntPtr wParam, int msg)
+        internal async void MyOnOnMouseUp(Point ptCurrent, IntPtr wParam, int msg)
         {
             if (IsValidPoint(ptCurrent))
             {
                 if (msg == (int)NativeMethods.WM_.WM_RBUTTONUP)
                 {
-                    _ptStartFill = ptCurrent;
                     IsRunning = true;
+                    if (cts == null)
+                    {
+                        cts = new CancellationTokenSource();
+                    }
+                    if (_lstTasks == null)
+                    {
+                        _lstTasks = new List<Task>();
+                    }
+                    var tsk = DoAreaFillAsync(ptCurrent);
+                    _lstTasks.Add(tsk);
+                    await Task.WhenAll(_lstTasks.ToArray());
+                    IsRunning = false;
+                    _lstTasks.Clear();
                 }
                 else
                 {
                     _ptCurrent = ptCurrent;
                     _ptOld = _ptCurrent;
-                    DrawACell(_ptCurrent);
-                }
-            }
-        }
-
-        private void DoAreaFill(Point ptCurrent)
-        {
-            if (IsValidPoint(ptCurrent))
-            {
-                if (_cells[ptCurrent.X, ptCurrent.Y] == 0)
-                {
-                    DrawACell(ptCurrent);
-                    if (this.DepthFirst)
-                    {
-                        _stack.Push(new Point(ptCurrent.X - 1, ptCurrent.Y));
-                        _stack.Push(new Point(ptCurrent.X + 1, ptCurrent.Y));
-                        _stack.Push(new Point(ptCurrent.X, ptCurrent.Y + 1));
-                        _stack.Push(new Point(ptCurrent.X, ptCurrent.Y - 1));
-                    }
-                    else
-                    {
-                        _queue.Enqueue(new Point(ptCurrent.X - 1, ptCurrent.Y));
-                        _queue.Enqueue(new Point(ptCurrent.X + 1, ptCurrent.Y));
-                        _queue.Enqueue(new Point(ptCurrent.X, ptCurrent.Y + 1));
-                        _queue.Enqueue(new Point(ptCurrent.X, ptCurrent.Y - 1));
-                    }
+                    DrawACell(_ptCurrent, ref _oColor);
                 }
             }
         }
