@@ -32,8 +32,6 @@ namespace AreaFill
     /// </summary>
     public partial class AreaFillWindow : Window
     {
-        private TextBox _tbxStatus;
-
         public AreaFillWindow()
         {
             //            InitializeComponent();
@@ -77,13 +75,15 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             >
             <CheckBox Content=""_Running"" 
                 IsChecked= ""{Binding Path=IsRunning}"" />
-            <CheckBox Content=""Gravity"" 
-                IsChecked= ""{Binding Path=Gravity}"" ToolTip=""Use Gravity or Bezier curves"" />
             <CheckBox Content=""DepthFirst"" 
                 IsChecked= ""{Binding Path=DepthFirst}"" />
+            <CheckBox Content=""FillViaPixels"" 
+                IsChecked= ""{Binding Path=FillViaPixels}"" />
             <CheckBox Content=""FillViaCPP"" 
                 IsChecked= ""{Binding Path=FillViaCPP}"" />
             <Button Name=""btnErase"" Content=""_Erase""/>
+            <CheckBox Content=""Gravity"" 
+                IsChecked= ""{Binding Path=Gravity}"" ToolTip=""Use Gravity or Bezier curves"" />
             <Label Content=""NumPts""/>
             <l:MyTextBox 
                 Text =""{Binding Path=NumPts}"" 
@@ -115,14 +115,15 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 </DockPanel>
 <DockPanel Grid.Row=""1"">
     <TextBox 
-        Name=""tbxStatus"" 
+        Name=""tbxStatus""
+        Text=""{Binding Path=strStatus}""
         HorizontalAlignment=""Left"" 
         Height=""23"" 
         Margin=""10,2,0,0"" 
         IsReadOnly=""True""
         TextWrapping=""Wrap"" 
         VerticalAlignment=""Top"" 
-        Width=""420""/>
+        Width=""920""/>
     <Slider 
         HorizontalAlignment=""Left"" 
         Minimum=""0""
@@ -145,7 +146,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 var grid = (Grid)(XamlReader.Load(xamlreader));
                 grid.DataContext = areaFillArea;
 
-                _tbxStatus = (TextBox)grid.FindName("tbxStatus");
                 var btnErase = (Button)grid.FindName("btnErase");
                 btnErase.Click += (o, ee) => { UpdateBindings(this); areaFillArea.DoErase(); };
                 var userCtrl = (UserControl)grid.FindName("MyUserControl");
@@ -214,6 +214,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     internal class AreaFillArea : MyHwndHost, INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
+        public const int Filled = 1;
+        public const int Empty = 0;
+
         void RaisePropChanged([CallerMemberName] string propName = "")
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propName));
@@ -231,6 +234,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public bool Gravity { get; set; }
 
         int _oColor = 0xffffff;
+        NativeMethods.WinPoint _ptPrev = new NativeMethods.WinPoint();
 
         private Point _ptCurrent;
         byte[,] _cells;
@@ -238,11 +242,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         //        private const int MK_RBUTTON = 2;
 
         public bool DepthFirst { get; set; }
-        public bool FillViaCPP { get; set; } = true;
+        public bool FillViaCPP { get; set; } = false;
+        public bool FillViaPixels { get; set; } = false;
 
         public int NumPts { get; set; } = 10;
         public int NumSegs { get; set; } = 5;
-
+        private string _strStatus;
+        public string strStatus { get { return _strStatus; } set { _strStatus = value; RaisePropChanged(); } }
+        stats _stats;
         int _CellWidth = 1;
         public int CellWidth
         {
@@ -289,7 +296,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         hWnd = _hwnd,
                         ArraySize = new Point(nTotCols, nTotRows),
                         StartPoint = ptStartFill,
-                        DepthFirst = DepthFirst
+                        DepthFirst = DepthFirst,
+                        FillViaPixels = FillViaPixels
                     };
                     iara.DoAreaFill(areaFillData, ref cancellationRequested, arr);
                 }
@@ -368,6 +376,16 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             nTotRows = (int)(this.ActualHeight * yScale / CellHeight);
             nTotCols = (int)(this.ActualWidth * xScale / CellWidth);
             _cells = new byte[nTotCols, nTotRows];
+            for (int row = 0; row < nTotRows; row++)
+            {
+                _cells[0, row] = Filled;
+                _cells[nTotCols - 1, row] = Filled;
+            }
+            for (int col = 0; col < nTotCols; col++)
+            {
+                _cells[col, 0] = Filled;
+                _cells[col, nTotRows - 1] = Filled;
+            }
             if (_hdc != IntPtr.Zero)
             {
                 NativeMethods.ReleaseDC(_hwnd, _hdc);
@@ -376,7 +394,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             if (Gravity)
             {
                 DrawGravityLines();
-
             }
             else
             {
@@ -409,18 +426,43 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         {
                             var stack = new Stack<Point>();
                             stack.Push(ptStartFill);
+                            void addNESW(Point pt)
+                            {
+                                pt.X--;
+                                stack.Push(pt);
+                                pt.X += 2;
+                                stack.Push(pt);
+                                pt.X--;
+                                pt.Y++;
+                                stack.Push(pt);
+                                pt.Y -= 2;
+                                stack.Push(pt);
+                            }
                             while (stack.Count > 0 && !cts.IsCancellationRequested)
                             {
+                                if (stack.Count > _stats.nMaxDepth)
+                                {
+                                    _stats.nMaxDepth = stack.Count;
+                                }
                                 var ptCurrent = stack.Pop();
+                                _stats.nPtsVisited++;
                                 if (IsValidPoint(ptCurrent))
                                 {
-                                    if (_cells[ptCurrent.X, ptCurrent.Y] == 0)
+                                    if (_cells[ptCurrent.X, ptCurrent.Y] == Empty)
                                     {
-                                        DrawACell(ptCurrent, ref oColor);
-                                        stack.Push(new Point(ptCurrent.X - 1, ptCurrent.Y));
-                                        stack.Push(new Point(ptCurrent.X + 1, ptCurrent.Y));
-                                        stack.Push(new Point(ptCurrent.X, ptCurrent.Y + 1));
-                                        stack.Push(new Point(ptCurrent.X, ptCurrent.Y - 1));
+                                        _stats.nPtsDrawn++;
+                                        if (!FillViaPixels)
+                                        {
+                                            DoFillViaLines(ptCurrent, ref oColor, addNESW, (pt) =>
+                                            {
+                                                stack.Push(pt);
+                                            });
+                                        }
+                                        else
+                                        {
+                                            DrawACell(ptCurrent, ref oColor);
+                                            addNESW(ptCurrent);
+                                        }
                                     }
                                 }
                             }
@@ -429,19 +471,47 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         {
                             var queue = new Queue<Point>();
                             queue.Enqueue(ptStartFill);
+                            void addNESW(Point pt)
+                            {
+                                pt.X--;
+                                queue.Enqueue(pt);
+                                pt.X += 2;
+                                queue.Enqueue(pt);
+                                pt.X--;
+                                pt.Y++;
+                                queue.Enqueue(pt);
+                                pt.Y -= 2;
+                                queue.Enqueue(pt);
+                                //queue.Enqueue(new Point(pt.X - 1, pt.Y));
+                                //queue.Enqueue(new Point(pt.X + 1, pt.Y));
+                                //queue.Enqueue(new Point(pt.X, pt.Y + 1));
+                                //queue.Enqueue(new Point(pt.X, pt.Y - 1));
+                            }
                             while (queue.Count > 0 && !cts.IsCancellationRequested)
                             {
+                                if (queue.Count > _stats.nMaxDepth)
+                                {
+                                    _stats.nMaxDepth = queue.Count;
+                                }
                                 var ptCurrent = queue.Dequeue();
+                                _stats.nPtsVisited++;
                                 if (IsValidPoint(ptCurrent))
                                 {
-                                    if (_cells[ptCurrent.X, ptCurrent.Y] == 0)
+                                    if (_cells[ptCurrent.X, ptCurrent.Y] == Empty)
                                     {
-                                        Thread.Sleep(1);
-                                        DrawACell(ptCurrent, ref oColor);
-                                        queue.Enqueue(new Point(ptCurrent.X - 1, ptCurrent.Y));
-                                        queue.Enqueue(new Point(ptCurrent.X + 1, ptCurrent.Y));
-                                        queue.Enqueue(new Point(ptCurrent.X, ptCurrent.Y + 1));
-                                        queue.Enqueue(new Point(ptCurrent.X, ptCurrent.Y - 1));
+                                        _stats.nPtsDrawn++;
+                                        if (!FillViaPixels)
+                                        {
+                                            DoFillViaLines(ptCurrent, ref oColor,addNESW, (pt)=>
+                                            {
+                                                queue.Enqueue(pt);
+                                            });
+                                        }
+                                        else
+                                        {
+                                            DrawACell(ptCurrent, ref oColor);
+                                            addNESW(ptCurrent);
+                                        }
                                     }
                                 }
                             }
@@ -454,6 +524,72 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 tcs.SetResult(0);
             });
             return tsk;
+        }
+
+        private void DoFillViaLines(Point ptCurrent, ref int oColor, Action<Point> addNESW, Action<Point> actAddItem)
+        {
+            {
+                var ptWestBound = ptCurrent;
+                ptWestBound.X--;
+                while (_cells[ptWestBound.X, ptWestBound.Y] == Empty)
+                {
+                    ptWestBound.X--;
+                }
+                ptWestBound.X++;
+                var ptEastBound = ptCurrent;
+                ptEastBound.X++;
+                while (_cells[ptEastBound.X, ptEastBound.Y] == Empty)
+                {
+                    ptEastBound.X++;
+                }
+                ptEastBound.X--;
+                if (ptWestBound.X != ptEastBound.X)
+                {
+                    DrawLineRaw(ptWestBound, ptEastBound, ref oColor);
+                    for (; ptWestBound.X <= ptEastBound.X; ptWestBound.X++)
+                    {
+                        _cells[ptWestBound.X, ptWestBound.Y] = Filled;
+                        actAddItem(new Point(ptWestBound.X, ptWestBound.Y + 1));
+                        actAddItem(new Point(ptWestBound.X, ptWestBound.Y - 1));
+                    }
+                }
+                else
+                {
+                    DrawACell(ptCurrent, ref oColor);
+                    addNESW(ptCurrent);
+                }
+            }
+            {
+                var ptNorthBound = ptCurrent;
+                ptNorthBound.Y--;
+                while (_cells[ptNorthBound.X, ptNorthBound.Y] == 0)
+                {
+                    ptNorthBound.Y--;
+                }
+                ptNorthBound.Y++;
+                var ptSouthBound = ptCurrent;
+                ptSouthBound.Y++;
+                while (_cells[ptSouthBound.X, ptSouthBound.Y] == 0)
+                {
+                    ptSouthBound.Y++;
+                }
+                ptSouthBound.Y--;
+                if (ptSouthBound.Y != ptNorthBound.Y)
+                {
+                    DrawLineRaw(ptNorthBound, ptSouthBound, ref oColor);
+                    for (; ptNorthBound.Y <= ptSouthBound.Y; ptNorthBound.Y++)
+                    {
+                        _cells[ptNorthBound.X, ptNorthBound.Y] = Filled;
+                        actAddItem(new Point(ptNorthBound.X - 1, ptNorthBound.Y));
+                        actAddItem(new Point(ptNorthBound.X + 1, ptNorthBound.Y));
+                    }
+                }
+                else
+                {
+                    DrawACell(ptCurrent, ref oColor);
+                    addNESW(ptCurrent);
+                }
+            }
         }
 
         private void DrawGravityLines() // https://github.com/calvinhsia/Cartoon
@@ -682,18 +818,30 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         {
             return new Point((int)(pt.X * xScale), (int)(pt.Y * yScale));
         }
+        void DrawLineRaw(Point p0, Point p1, ref int oColor)
+        {
+            var pen = NativeMethods.CreatePen(nPenStyle: 0, nWidth: 1, nColor: (IntPtr)oColor);
+            oColor = (oColor + 140) & 0xffffff;
+            NativeMethods.SelectObject(_hdc, pen);
+            NativeMethods.MoveToEx(_hdc, p0.X, p0.Y, ref _ptPrev);
+            NativeMethods.LineTo(_hdc, p1.X, p1.Y);
+            NativeMethods.DeleteObject(pen);
+        }
         bool DrawACell(Point pt, ref int oColor, bool MakeVisible = false)
         {
             bool didDraw = false;
             if (pt.X >= 0 && pt.X < _cells.GetLength(0) && pt.Y >= 0 && pt.Y < _cells.GetLength(1))
             {
-                if (_cells[pt.X, pt.Y] == 0)
+                if (_cells[pt.X, pt.Y] == Empty)
                 {
-                    _cells[pt.X, pt.Y] = 1;
+                    _cells[pt.X, pt.Y] = Filled;
                     oColor = (oColor + 140) & 0xffffff;
                     //                    _pen = NativeMethods.CreatePen(nPenStyle: 0, nWidth: nPenWidth, nColor: (IntPtr)_oColor);
                     //*
-                    NativeMethods.SetPixel(_hdc, pt.X, pt.Y, (IntPtr)oColor);
+                    lock (this)
+                    {
+                        NativeMethods.SetPixel(_hdc, pt.X, pt.Y, (IntPtr)oColor);
+                    }
                     if (MakeVisible)
                     {
                         for (int i = 1; i < 10; i++)
@@ -768,7 +916,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
             }
         }
-
         bool IsValidPoint(Point pt)
         {
             if (pt.X >= 0 && pt.X < _cells.GetLength(0) * _CellWidth && pt.Y >= 0 && pt.Y < _cells.GetLength(1) * _CellHeight)
@@ -818,11 +965,15 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     {
                         _lstTasks = new List<Task>();
                     }
+                    _stats.Init();
+                    var sw = Stopwatch.StartNew();
                     var tsk = DoAreaFillAsync(ptCurrent);
                     _lstTasks.Add(tsk);
+                    strStatus = $"Filling {_lstTasks.Count()}";
                     await Task.WhenAll(_lstTasks.ToArray());
                     IsRunning = false;
                     _lstTasks.Clear();
+                    strStatus = $"{_stats.ToString()} Rate={_stats.nPtsDrawn / sw.Elapsed.TotalSeconds:n2}";
                 }
                 else
                 {
@@ -926,6 +1077,24 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         regasm.exe "$(TargetPath)"  /tlb
      */
 
+    public struct stats
+    {
+        public void Init()
+        {
+            nMaxDepth = 0;
+            nPtsVisited = 0;
+            nPtsDrawn = 0;
+        }
+        public int nMaxDepth;
+        public int nPtsVisited;
+        public int nPtsDrawn;
+
+        public override string ToString()
+        {
+            return $"MaxDepth={nMaxDepth:n0} {nameof(nPtsVisited)}={nPtsVisited:n0} {nameof(nPtsDrawn)}={nPtsDrawn:n0}";
+        }
+    };
+
     [ComVisible(true)]
     [Guid("98D44702-2AB4-47F3-97A7-85EE798EEF90")]
     public struct Point
@@ -950,6 +1119,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public Point ArraySize;
         public IntPtr hWnd;
         public bool DepthFirst;
+        public bool FillViaPixels;
     }
 
     [ComVisible(true)]
