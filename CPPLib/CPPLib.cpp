@@ -75,6 +75,12 @@ private:
 	COLORREF color = 0xffffff;
 	stack<Point> _stack;
 	queue<Point> _queue;
+
+	void DoTheFilling(Point startPoint)
+	{
+
+	}
+
 	void DrawCell(Point pt)
 	{
 		if (pt.X >= 0 && pt.X < _areaFillData.ArraySize.X && pt.Y >= 0 && pt.Y < _areaFillData.ArraySize.Y)
@@ -85,7 +91,7 @@ private:
 			{
 				_pstats->nPtsDrawn++;
 				_cells[ndx] = 1;
-				color = (color + 140) & 0xffffff;
+				color = (color + _areaFillData.ColorInc) & 0xffffff;
 				//auto hBr = CreateSolidBrush(color);
 				//SelectObject(_hdc, hBr);
 				//_rect.left = pt.X;
