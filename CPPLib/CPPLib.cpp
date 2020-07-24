@@ -27,10 +27,12 @@ public:
 	DECLARE_NO_REGISTRY()
 	HRESULT __stdcall raw_DoAreaFill(
 		AreaFillData areaFillData,
+		AreaFillStats *pstats,
 		long *pIsCancellationRequested,
 		BYTE* array)
 	{
 		_areaFillData = areaFillData;
+		_pstats = pstats;
 		_hdc = GetDC((HWND)areaFillData.hWnd);
 		_cells = array;
 		if (areaFillData.DepthFirst == VARIANT_FALSE)
@@ -66,6 +68,7 @@ public:
 	}
 private:
 	AreaFillData _areaFillData;
+	AreaFillStats* _pstats;
 	HDC _hdc;
 	RECT _rect;
 	BYTE* _cells;
@@ -76,9 +79,11 @@ private:
 	{
 		if (pt.X >= 0 && pt.X < _areaFillData.ArraySize.X && pt.Y >= 0 && pt.Y < _areaFillData.ArraySize.Y)
 		{
+			_pstats->nPtsVisited++;
 			auto ndx = pt.X * _areaFillData.ArraySize.Y + pt.Y;
 			if (_cells[ndx] == 0)
 			{
+				_pstats->nPtsDrawn++;
 				_cells[ndx] = 1;
 				color = (color + 140) & 0xffffff;
 				//auto hBr = CreateSolidBrush(color);

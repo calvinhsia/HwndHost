@@ -215,7 +215,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     {
         public event PropertyChangedEventHandler PropertyChanged;
         public const int Filled = 1;
-        public const int Empty = 0;
 
         void RaisePropChanged([CallerMemberName] string propName = "")
         {
@@ -249,7 +248,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public int NumSegs { get; set; } = 5;
         private string _strStatus;
         public string strStatus { get { return _strStatus; } set { _strStatus = value; RaisePropChanged(); } }
-        stats _stats;
+        AreaFillStats _stats;
         int _CellWidth = 1;
         public int CellWidth
         {
@@ -299,12 +298,12 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         DepthFirst = DepthFirst,
                         FillViaPixels = FillViaPixels
                     };
-                    iara.DoAreaFill(areaFillData, ref cancellationRequested, arr);
+                    iara.DoAreaFill(areaFillData, ref _stats, ref cancellationRequested, arr);
                 }
                 Marshal.ReleaseComObject(iara);
-                GC.Collect();
-                Marshal.CleanupUnusedObjectsInCurrentContext();
-                FreeLibrary(_hModule);
+                //GC.Collect();
+                //Marshal.CleanupUnusedObjectsInCurrentContext();
+                //FreeLibrary(_hModule);
             }
         }
         public bool IsRunning
@@ -448,9 +447,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 _stats.nPtsVisited++;
                                 if (IsValidPoint(ptCurrent))
                                 {
-                                    if (_cells[ptCurrent.X, ptCurrent.Y] == Empty)
+                                    if (_cells[ptCurrent.X, ptCurrent.Y] != Filled)
                                     {
-                                        _stats.nPtsDrawn++;
                                         if (!FillViaPixels)
                                         {
                                             DoFillViaLines(ptCurrent, ref oColor, addNESW, (pt) =>
@@ -460,6 +458,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                         }
                                         else
                                         {
+                                            _stats.nPtsDrawn++;
                                             DrawACell(ptCurrent, ref oColor);
                                             addNESW(ptCurrent);
                                         }
@@ -482,10 +481,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 queue.Enqueue(pt);
                                 pt.Y -= 2;
                                 queue.Enqueue(pt);
-                                //queue.Enqueue(new Point(pt.X - 1, pt.Y));
-                                //queue.Enqueue(new Point(pt.X + 1, pt.Y));
-                                //queue.Enqueue(new Point(pt.X, pt.Y + 1));
-                                //queue.Enqueue(new Point(pt.X, pt.Y - 1));
                             }
                             while (queue.Count > 0 && !cts.IsCancellationRequested)
                             {
@@ -497,18 +492,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 _stats.nPtsVisited++;
                                 if (IsValidPoint(ptCurrent))
                                 {
-                                    if (_cells[ptCurrent.X, ptCurrent.Y] == Empty)
+                                    if (_cells[ptCurrent.X, ptCurrent.Y] != Filled)
                                     {
-                                        _stats.nPtsDrawn++;
                                         if (!FillViaPixels)
                                         {
-                                            DoFillViaLines(ptCurrent, ref oColor,addNESW, (pt)=>
-                                            {
-                                                queue.Enqueue(pt);
-                                            });
+                                            DoFillViaLines(ptCurrent, ref oColor, addNESW, (pt) =>
+                                             {
+                                                 queue.Enqueue(pt);
+                                             });
                                         }
                                         else
                                         {
+                                            _stats.nPtsDrawn++;
                                             DrawACell(ptCurrent, ref oColor);
                                             addNESW(ptCurrent);
                                         }
@@ -528,67 +523,67 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         private void DoFillViaLines(Point ptCurrent, ref int oColor, Action<Point> addNESW, Action<Point> actAddItem)
         {
+            var ptWestBound = ptCurrent;
+            ptWestBound.X--;
+            while (_cells[ptWestBound.X, ptWestBound.Y] != Filled)
             {
-                var ptWestBound = ptCurrent;
                 ptWestBound.X--;
-                while (_cells[ptWestBound.X, ptWestBound.Y] == Empty)
-                {
-                    ptWestBound.X--;
-                }
-                ptWestBound.X++;
-                var ptEastBound = ptCurrent;
+            }
+            ptWestBound.X++;
+            var ptEastBound = ptCurrent;
+            ptEastBound.X++;
+            while (_cells[ptEastBound.X, ptEastBound.Y] != Filled)
+            {
                 ptEastBound.X++;
-                while (_cells[ptEastBound.X, ptEastBound.Y] == Empty)
+            }
+            ptEastBound.X--;
+            if (ptWestBound.X != ptEastBound.X)
+            {
+                DrawLineRaw(ptWestBound, ptEastBound, ref oColor);
+                _stats.nPtsDrawn += ptEastBound.X - ptWestBound.X;
+                for (; ptWestBound.X <= ptEastBound.X; ptWestBound.X++)
                 {
-                    ptEastBound.X++;
-                }
-                ptEastBound.X--;
-                if (ptWestBound.X != ptEastBound.X)
-                {
-                    DrawLineRaw(ptWestBound, ptEastBound, ref oColor);
-                    for (; ptWestBound.X <= ptEastBound.X; ptWestBound.X++)
-                    {
-                        _cells[ptWestBound.X, ptWestBound.Y] = Filled;
-                        actAddItem(new Point(ptWestBound.X, ptWestBound.Y + 1));
-                        actAddItem(new Point(ptWestBound.X, ptWestBound.Y - 1));
-                    }
-                }
-                else
-                {
-                    DrawACell(ptCurrent, ref oColor);
-                    addNESW(ptCurrent);
+                    _cells[ptWestBound.X, ptWestBound.Y] = Filled;
+                    actAddItem(new Point(ptWestBound.X, ptWestBound.Y + 1));
+                    actAddItem(new Point(ptWestBound.X, ptWestBound.Y - 1));
                 }
             }
+            else
             {
-                var ptNorthBound = ptCurrent;
+                _stats.nPtsDrawn++;
+                DrawACell(ptCurrent, ref oColor);
+                addNESW(ptCurrent);
+            }
+            var ptNorthBound = ptCurrent;
+            ptNorthBound.Y--;
+            while (_cells[ptNorthBound.X, ptNorthBound.Y] != Filled)
+            {
                 ptNorthBound.Y--;
-                while (_cells[ptNorthBound.X, ptNorthBound.Y] == 0)
-                {
-                    ptNorthBound.Y--;
-                }
-                ptNorthBound.Y++;
-                var ptSouthBound = ptCurrent;
+            }
+            ptNorthBound.Y++;
+            var ptSouthBound = ptCurrent;
+            ptSouthBound.Y++;
+            while (_cells[ptSouthBound.X, ptSouthBound.Y] != Filled)
+            {
                 ptSouthBound.Y++;
-                while (_cells[ptSouthBound.X, ptSouthBound.Y] == 0)
+            }
+            ptSouthBound.Y--;
+            if (ptSouthBound.Y != ptNorthBound.Y)
+            {
+                DrawLineRaw(ptNorthBound, ptSouthBound, ref oColor);
+                _stats.nPtsDrawn += ptSouthBound.Y - ptNorthBound.Y;
+                for (; ptNorthBound.Y <= ptSouthBound.Y; ptNorthBound.Y++)
                 {
-                    ptSouthBound.Y++;
+                    _cells[ptNorthBound.X, ptNorthBound.Y] = Filled;
+                    actAddItem(new Point(ptNorthBound.X - 1, ptNorthBound.Y));
+                    actAddItem(new Point(ptNorthBound.X + 1, ptNorthBound.Y));
                 }
-                ptSouthBound.Y--;
-                if (ptSouthBound.Y != ptNorthBound.Y)
-                {
-                    DrawLineRaw(ptNorthBound, ptSouthBound, ref oColor);
-                    for (; ptNorthBound.Y <= ptSouthBound.Y; ptNorthBound.Y++)
-                    {
-                        _cells[ptNorthBound.X, ptNorthBound.Y] = Filled;
-                        actAddItem(new Point(ptNorthBound.X - 1, ptNorthBound.Y));
-                        actAddItem(new Point(ptNorthBound.X + 1, ptNorthBound.Y));
-                    }
-                }
-                else
-                {
-                    DrawACell(ptCurrent, ref oColor);
-                    addNESW(ptCurrent);
-                }
+            }
+            else
+            {
+                _stats.nPtsDrawn++;
+                DrawACell(ptCurrent, ref oColor);
+                addNESW(ptCurrent);
             }
         }
 
@@ -832,7 +827,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             bool didDraw = false;
             if (pt.X >= 0 && pt.X < _cells.GetLength(0) && pt.Y >= 0 && pt.Y < _cells.GetLength(1))
             {
-                if (_cells[pt.X, pt.Y] == Empty)
+                if (_cells[pt.X, pt.Y] != Filled)
                 {
                     _cells[pt.X, pt.Y] = Filled;
                     oColor = (oColor + 140) & 0xffffff;
@@ -1076,8 +1071,9 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         call "$(DevEnvDir)..\..\vc\Auxiliary\build\vcvarsall.bat" x86
         regasm.exe "$(TargetPath)"  /tlb
      */
-
-    public struct stats
+    [ComVisible(true)]
+    [Guid("37D6D06B-C3EF-443A-B1C9-5322E411CEC6")]
+    public struct AreaFillStats
     {
         public void Init()
         {
@@ -1127,7 +1123,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     unsafe public interface IAreaFill
     {
-        void DoAreaFill(AreaFillData areaFillData, ref int pIsCancellationRequested, byte* array);
+        void DoAreaFill(AreaFillData areaFillData, ref AreaFillStats stats, ref int pIsCancellationRequested, byte* array);
     }
 
 }
