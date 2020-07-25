@@ -251,7 +251,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         //        private const int MK_RBUTTON = 2;
 
         public bool DepthFirst { get; set; }
-        public bool FillViaCPP { get; set; } = false;
+        public bool FillViaCPP { get; set; } = true;
         public bool FillViaPixels { get; set; } = false;
         public int ColorInc { get; set; } = 140;
         public bool FillAll { get; set; } = true;
@@ -434,19 +434,19 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             });
             return tsk;
         }
-        void DoTheFilling(IReadOnlyCollection<Point> colPoints, Func<Point> getNextPoint, ref int oColor, Action<Point> actAddItem)
+        void DoTheFilling(IReadOnlyCollection<Point> colPoints, Func<Point> GetNextPoint, ref int oColor, Action<Point> AddPoint)
         {
             void addNESW(Point pt)
             {
                 pt.X--;
-                actAddItem(pt);
+                AddPoint(pt);
                 pt.X += 2;
-                actAddItem(pt);
+                AddPoint(pt);
                 pt.X--;
                 pt.Y++;
-                actAddItem(pt);
+                AddPoint(pt);
                 pt.Y -= 2;
-                actAddItem(pt);
+                AddPoint(pt);
             }
             while (colPoints.Count() > 0 && !_cts.IsCancellationRequested)
             {
@@ -454,12 +454,13 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 {
                     _stats.nMaxDepth = colPoints.Count;
                 }
-                var ptCurrent = getNextPoint();
+                var ptCurrent = GetNextPoint();
                 _stats.nPtsVisited++;
                 if (IsValidPoint(ptCurrent))
                 {
                     if (_cells[ptCurrent.X, ptCurrent.Y] != Filled)
                     {
+                        bool DidDrawCurrent = false;
                         if (!FillViaPixels)
                         {
                             var ptWestBound = ptCurrent;
@@ -483,8 +484,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 for (; ptWestBound.X <= ptEastBound.X; ptWestBound.X++)
                                 {
                                     _cells[ptWestBound.X, ptWestBound.Y] = Filled;
-                                    actAddItem(new Point(ptWestBound.X, ptWestBound.Y + 1));
-                                    actAddItem(new Point(ptWestBound.X, ptWestBound.Y - 1));
+                                    AddPoint(new Point(ptWestBound.X, ptWestBound.Y + 1));
+                                    AddPoint(new Point(ptWestBound.X, ptWestBound.Y - 1));
                                 }
                             }
                             else
@@ -492,6 +493,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 _stats.nPtsDrawn++;
                                 DrawACell(ptCurrent, ref oColor);
                                 addNESW(ptCurrent);
+                                DidDrawCurrent = true;
                             }
                             var ptNorthBound = ptCurrent;
                             ptNorthBound.Y--;
@@ -514,15 +516,18 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                                 for (; ptNorthBound.Y <= ptSouthBound.Y; ptNorthBound.Y++)
                                 {
                                     _cells[ptNorthBound.X, ptNorthBound.Y] = Filled;
-                                    actAddItem(new Point(ptNorthBound.X - 1, ptNorthBound.Y));
-                                    actAddItem(new Point(ptNorthBound.X + 1, ptNorthBound.Y));
+                                    AddPoint(new Point(ptNorthBound.X - 1, ptNorthBound.Y));
+                                    AddPoint(new Point(ptNorthBound.X + 1, ptNorthBound.Y));
                                 }
                             }
                             else
                             {
-                                _stats.nPtsDrawn++;
-                                DrawACell(ptCurrent, ref oColor);
-                                addNESW(ptCurrent);
+                                if (!DidDrawCurrent)
+                                {
+                                    _stats.nPtsDrawn++;
+                                    DrawACell(ptCurrent, ref oColor);
+                                    addNESW(ptCurrent);
+                                }
                             }
                         }
                         else
@@ -970,10 +975,14 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 await DoOneFillAsync(ptStart);
                 if (FillAll)
                 {
-                    for (int row = 0; row < nTotRows; row++)
+                    for (int row = 0; row < nTotRows && !_cts.IsCancellationRequested; row++)
                     {
-                        for (int col = 0; col < nTotCols; col++)
+                        for (int col = 0; col < nTotCols && !_cts.IsCancellationRequested; col++)
                         {
+                            if (!IsRunning)
+                            {
+                                break;
+                            }
                             if (_cells[col, row] != Filled)
                             {
                                 await DoOneFillAsync(new Point(col, row));

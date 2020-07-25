@@ -4,6 +4,7 @@
 #include "atlcom.h"
 #include <queue>
 #include <stack>
+#include <functional>
 
 #include <initguid.h>
 
@@ -27,41 +28,26 @@ public:
 	DECLARE_NO_REGISTRY()
 	HRESULT __stdcall raw_DoAreaFill(
 		AreaFillData areaFillData,
-		AreaFillStats *pstats,
-		long *pIsCancellationRequested,
+		AreaFillStats* pstats,
+		long* pIsCancellationRequested,
 		BYTE* array)
 	{
 		_areaFillData = areaFillData;
 		_pstats = pstats;
+		_pIsCancellationRequested = pIsCancellationRequested;
 		_hdc = GetDC((HWND)areaFillData.hWnd);
 		_cells = array;
 		if (areaFillData.DepthFirst == VARIANT_FALSE)
 		{
-			_queue.push(areaFillData.StartPoint);
-			while (_queue.size() > 0)
-			{
-				if (*pIsCancellationRequested != 0)
-				{
-					break;
-				}
-				Point pt = _queue.front();
-				_queue.pop();
-				DrawCell(pt);
-			}
+			queue<Point> queue;
+			queue.push(areaFillData.StartPoint);
+			DoTheFilling([&]() {return queue.size(); }, [&]() {auto pt = queue.front(); queue.pop(); return pt; }, [&](Point pt) {queue.push(pt); });
 		}
 		else
 		{
-			_stack.push(areaFillData.StartPoint);
-			while (_stack.size() > 0)
-			{
-				if (*pIsCancellationRequested != 0)
-				{
-					break;
-				}
-				Point pt = _stack.top();
-				_stack.pop();
-				DrawCell(pt);
-			}
+			stack<Point> stack;
+			stack.push(areaFillData.StartPoint);
+			DoTheFilling([&]() {return stack.size(); }, [&]() {auto pt = stack.top(); stack.pop(); return pt; }, [&](Point pt) {stack.push(pt); });
 		}
 		ReleaseDC((HWND)areaFillData.hWnd, _hdc);
 		return S_OK;
@@ -69,20 +55,38 @@ public:
 private:
 	AreaFillData _areaFillData;
 	AreaFillStats* _pstats;
+	long* _pIsCancellationRequested;
 	HDC _hdc;
 	RECT _rect;
 	BYTE* _cells;
 	COLORREF color = 0xffffff;
-	stack<Point> _stack;
-	queue<Point> _queue;
 
-	void DoTheFilling(Point startPoint)
+	void DoTheFilling(function<int()> getCount, function<Point()> getNextPoint, function<void(Point)> AddPoint)
 	{
-
+		while (getCount() > 0)
+		{
+			if (*_pIsCancellationRequested != 0)
+			{
+				break;
+			}
+			Point pt = getNextPoint();
+			if (DrawCell(pt))
+			{
+				pt.X--;
+				AddPoint(pt);
+				pt.X += 2;
+				AddPoint(pt);
+				pt.X--; pt.Y++;
+				AddPoint(pt);
+				pt.Y -= 2;
+				AddPoint(pt);
+			}
+		}
 	}
 
-	void DrawCell(Point pt)
+	bool DrawCell(Point pt)
 	{
+		auto didDraw = false;
 		if (pt.X >= 0 && pt.X < _areaFillData.ArraySize.X && pt.Y >= 0 && pt.Y < _areaFillData.ArraySize.Y)
 		{
 			_pstats->nPtsVisited++;
@@ -90,43 +94,13 @@ private:
 			if (_cells[ndx] == 0)
 			{
 				_pstats->nPtsDrawn++;
+				didDraw = true;
 				_cells[ndx] = 1;
 				color = (color + _areaFillData.ColorInc) & 0xffffff;
-				//auto hBr = CreateSolidBrush(color);
-				//SelectObject(_hdc, hBr);
-				//_rect.left = pt.X;
-				//_rect.top = pt.Y;
-				//_rect.right = pt.X + 1;
-				//_rect.bottom= pt.Y + 1;
-				//FillRect(_hdc, &_rect, hBr);
-				//DeleteObject(hBr);
 				SetPixel(_hdc, pt.X, pt.Y, color);
-				if (_areaFillData.DepthFirst == VARIANT_FALSE)
-				{
-					pt.X--;
-					_queue.push(pt);
-					pt.X += 2;
-					_queue.push(pt);
-					pt.X--; pt.Y++;
-					_queue.push(pt);
-					pt.Y -= 2;
-					_queue.push(pt);
-				}
-				else
-				{
-					pt.X--;
-					_stack.push(pt);
-					pt.X += 2;
-					_stack.push(pt);
-					pt.X--; pt.Y++;
-					_stack.push(pt);
-					pt.Y -= 2;
-					_stack.push(pt);
-				}
 			}
 		}
-
-
+		return didDraw;
 	}
 };
 
