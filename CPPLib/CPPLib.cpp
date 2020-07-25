@@ -2,6 +2,7 @@
 #import "..\AreaFill\bin\debug\AreaFill.tlb" no_namespace
 #include "atlbase.h"
 #include "atlcom.h"
+//#define _ITERATOR_DEBUG_LEVEL 0
 #include <queue>
 #include <stack>
 #include <functional>
@@ -60,36 +61,143 @@ private:
 	RECT _rect;
 	BYTE* _cells;
 	COLORREF color = 0xffffff;
-
+#define Filled 1
+#define NDXFUNC(pt) (pt.X * _areaFillData.ArraySize.Y + ptCurrent.Y)
 	void DoTheFilling(function<int()> getCount, function<Point()> getNextPoint, function<void(Point)> AddPoint)
 	{
-		while (getCount() > 0)
+		while (true)
 		{
-			if (*_pIsCancellationRequested != 0)
+			auto nCnt = getCount();
+			if (nCnt == 0 || *_pIsCancellationRequested != 0)
 			{
 				break;
 			}
-			Point pt = getNextPoint();
-			if (DrawCell(pt))
+			if (nCnt > _pstats->nMaxDepth)
 			{
-				pt.X--;
-				AddPoint(pt);
-				pt.X += 2;
-				AddPoint(pt);
-				pt.X--; pt.Y++;
-				AddPoint(pt);
-				pt.Y -= 2;
-				AddPoint(pt);
+				_pstats->nMaxDepth = nCnt;
 			}
+			Point ptCurrent = getNextPoint();
+			_pstats->nPtsVisited++;
+			if (ptCurrent.X >= 0 && ptCurrent.X < _areaFillData.ArraySize.X && ptCurrent.Y >= 0 && ptCurrent.Y < _areaFillData.ArraySize.Y)
+			{
+				if (_cells[NDXFUNC(ptCurrent)] == 0)
+				{
+					auto DidDrawCurrent = false;
+					if (_areaFillData.FillViaPixels == VARIANT_FALSE)
+					{
+						auto ptWestBound = ptCurrent;
+						ptWestBound.X--;
+						while (_cells[NDXFUNC(ptWestBound)] != Filled)
+						{
+							ptWestBound.X--;
+						}
+						ptWestBound.X++;
+						auto ptEastBound = ptCurrent;
+						ptEastBound.X++;
+						while (_cells[NDXFUNC(ptEastBound)] != Filled)
+						{
+							ptEastBound.X++;
+						}
+						ptEastBound.X--;
+						if (ptWestBound.X != ptEastBound.X)
+						{
+							DrawLineRaw(ptWestBound, ptEastBound);
+							_pstats->nPtsDrawn += ptEastBound.X - ptWestBound.X;
+							for (; ptWestBound.X <= ptEastBound.X; ptWestBound.X++)
+							{
+								_cells[NDXFUNC(ptWestBound)] = Filled;
+								ptWestBound.Y++;
+								AddPoint(ptWestBound);
+								ptWestBound.Y -= 2;
+								AddPoint(ptWestBound);
+								ptWestBound.Y++;
+							}
+						}
+						else
+						{
+							_pstats->nPtsDrawn++;
+							DrawCell(ptCurrent);
+							AddNESW(ptCurrent, AddPoint);
+							DidDrawCurrent = true;
+						}
+						auto ptNorthBound = ptCurrent;
+						ptNorthBound.Y--;
+						while (_cells[NDXFUNC(ptNorthBound)] != Filled)
+						{
+							ptNorthBound.Y--;
+						}
+						ptNorthBound.Y++;
+						auto ptSouthBound = ptCurrent;
+						ptSouthBound.Y++;
+						while (_cells[NDXFUNC(ptSouthBound)] != Filled)
+						{
+							ptSouthBound.Y++;
+						}
+						ptSouthBound.Y--;
+						if (ptSouthBound.Y != ptNorthBound.Y)
+						{
+							DrawLineRaw(ptNorthBound, ptSouthBound);
+							_pstats->nPtsDrawn += ptSouthBound.Y - ptNorthBound.Y;
+							for (; ptNorthBound.Y <= ptSouthBound.Y; ptNorthBound.Y++)
+							{
+								_cells[NDXFUNC(ptNorthBound)] = Filled;
+								ptNorthBound.X--;
+								AddPoint(ptNorthBound);
+								ptNorthBound.X += 2;
+								AddPoint(ptNorthBound);
+								ptNorthBound.X--;
+							}
+						}
+						else
+						{
+							if (!DidDrawCurrent)
+							{
+								_pstats->nPtsDrawn++;
+								DrawCell(ptCurrent);
+								AddNESW(ptCurrent, AddPoint);
+							}
+						}
+					}
+					else
+					{
+						if (DrawCell(ptCurrent))
+						{
+							AddNESW(ptCurrent, AddPoint);
+						}
+					}
+				}
+
+			}
+
 		}
 	}
+	void AddNESW(Point pt, function<void(Point)> AddPoint)
+	{
+		pt.X--;
+		AddPoint(pt);
+		pt.X += 2;
+		AddPoint(pt);
+		pt.X--;
+		pt.Y++;
+		AddPoint(pt);
+		pt.Y -= 2;
+		AddPoint(pt);
+	}
+	void DrawLineRaw(Point pt0, Point pt1)
+	{
+		auto pen = CreatePen(0, 1, color);
+		color = (color + _areaFillData.ColorInc) & 0xffffff;
+		SelectObject(_hdc, pen);
+		MoveToEx(_hdc, pt0.X, pt0.Y, nullptr);
+		LineTo(_hdc, pt1.X, pt1.Y);
+		DeleteObject(pen);
 
+	}
 	bool DrawCell(Point pt)
 	{
 		auto didDraw = false;
 		if (pt.X >= 0 && pt.X < _areaFillData.ArraySize.X && pt.Y >= 0 && pt.Y < _areaFillData.ArraySize.Y)
 		{
-			_pstats->nPtsVisited++;
 			auto ndx = pt.X * _areaFillData.ArraySize.Y + pt.Y;
 			if (_cells[ndx] == 0)
 			{
