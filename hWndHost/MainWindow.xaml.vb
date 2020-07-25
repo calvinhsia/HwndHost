@@ -489,7 +489,9 @@ Public Module NativeMethods
     End Function
 
     Public Enum WM_
+        WM_DESTROY = &H2
         WM_PAINT = &HF
+        WM_CLOSE = &H10
         WM_ERASEBKGND = &H14
         WM_NCHITTEST = &H84
         WM_MOUSEFIRST = &H200

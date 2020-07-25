@@ -38,7 +38,6 @@ namespace AreaFill
             WindowState = WindowState.Maximized;
             this.Loaded += AreaFillWindow_Loaded;
         }
-
         private void AreaFillWindow_Loaded(object sender, RoutedEventArgs e)
         {
             try
@@ -150,7 +149,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 var bgdOcean = NativeMethods.CreateSolidBrush(
                     new IntPtr(0xffffff));
                 var areaFillArea = new AreaFillArea(this, bgdOcean);
-
                 var strReader = new System.IO.StringReader(strxaml);
                 var xamlreader = XmlReader.Create(strReader);
                 var grid = (Grid)(XamlReader.Load(xamlreader));
@@ -239,6 +237,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         private bool _ResetRequired;
         public Random _rand = new Random(1);
 
+        Lazy< IAreaFill>  _iAreaFill;
+
         public Point? _ptOld { get; set; }
         public bool Gravity { get; set; }
 
@@ -316,6 +316,30 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
 
         public AreaFillArea(AreaFillWindow areaFillWindow, IntPtr bgdOcean) : base(bgdOcean)
         {
+            _iAreaFill = new Lazy<IAreaFill>(() =>
+            {
+                var guidComClass = new Guid("BB4B9EE1-81DE-400B-A58A-687ED53A02E6");
+                var hr = CoCreateFromFile("CppLib.dll", guidComClass, typeof(IAreaFill).GUID, out var pObject);
+                var iAreaFill = (IAreaFill)Marshal.GetTypedObjectForIUnknown(pObject, typeof(IAreaFill));
+                return iAreaFill;
+            });
+            this.Loaded += (ol, el) =>
+              {
+                  Window.GetWindow(this).Closed += (oc, ec) =>
+                    {
+                        if (_iAreaFill.IsValueCreated)
+                        {
+                            if (IsRunning)
+                            {
+                                IsRunning = false;
+                            }
+                            Marshal.ReleaseComObject(_iAreaFill.Value);
+                            GC.Collect();
+                            Marshal.CleanupUnusedObjectsInCurrentContext();
+                            FreeLibrary(_hModule);
+                        }
+                    };
+              };
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_NCHITTEST);
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_MOUSEMOVE);
             LstWndProcMsgs.Add((int)NativeMethods.WM_.WM_LBUTTONDOWN);
@@ -548,9 +572,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 cancellationRequested = 1;
             }))
             {
-                var guidComClass = new Guid("BB4B9EE1-81DE-400B-A58A-687ED53A02E6");
-                var hr = CoCreateFromFile("CppLib.dll", guidComClass, typeof(IAreaFill).GUID, out var pObject);
-                var iara = (IAreaFill)Marshal.GetTypedObjectForIUnknown(pObject, typeof(IAreaFill));
                 fixed (byte* arr = _cells)
                 {
                     AreaFillData areaFillData = new AreaFillData()
@@ -562,9 +583,8 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                         ColorInc = ColorInc,
                         FillViaPixels = FillViaPixels
                     };
-                    iara.DoAreaFill(areaFillData, ref _stats, ref cancellationRequested, arr);
+                    _iAreaFill.Value.DoAreaFill(areaFillData, ref _stats, ref _oColor, ref cancellationRequested, arr);
                 }
-                Marshal.ReleaseComObject(iara);
                 //GC.Collect();
                 //Marshal.CleanupUnusedObjectsInCurrentContext();
                 //FreeLibrary(_hModule);
@@ -1074,7 +1094,6 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             return hr;
         }
 
-
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern IntPtr LoadLibrary(string dllName);
 
@@ -1082,6 +1101,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         public static extern int FreeLibrary(IntPtr handle);
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr GetProcAddress(IntPtr hModule, string procname);
+
 
         const string IUnknownGuid = "00000001-0000-0000-C000-000000000046";
         [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid(IUnknownGuid)]
@@ -1150,7 +1170,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     unsafe public interface IAreaFill
     {
-        void DoAreaFill(AreaFillData areaFillData, ref AreaFillStats stats, ref int pIsCancellationRequested, byte* array);
+        void DoAreaFill(AreaFillData areaFillData, ref AreaFillStats stats, ref int oColor, ref int pIsCancellationRequested, byte* array);
     }
 
 }

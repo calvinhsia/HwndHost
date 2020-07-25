@@ -30,11 +30,13 @@ public:
 	HRESULT __stdcall raw_DoAreaFill(
 		AreaFillData areaFillData,
 		AreaFillStats* pstats,
+		long* pColor,
 		long* pIsCancellationRequested,
 		BYTE* array)
 	{
 		_areaFillData = areaFillData;
 		_pstats = pstats;
+		_pColor = pColor;
 		_pIsCancellationRequested = pIsCancellationRequested;
 		_hdc = GetDC((HWND)areaFillData.hWnd);
 		_cells = array;
@@ -42,7 +44,7 @@ public:
 		{
 			queue<Point> queue;
 			queue.push(areaFillData.StartPoint);
-			DoTheFilling([&]() {return queue.size(); }, [&]() {auto pt = queue.front(); queue.pop(); return pt; }, [&](Point pt) {queue.push(pt); });
+			DoTheFilling([&] {return queue.size(); }, [&] {auto pt = queue.front(); queue.pop(); return pt; }, [&](Point pt) {queue.push(pt); });
 		}
 		else
 		{
@@ -56,11 +58,11 @@ public:
 private:
 	AreaFillData _areaFillData;
 	AreaFillStats* _pstats;
+	long* _pColor;
 	long* _pIsCancellationRequested;
 	HDC _hdc;
 	RECT _rect;
 	BYTE* _cells;
-	COLORREF color = 0xffffff;
 #define Filled 1
 #define NDXFUNC(pt) (pt.X * _areaFillData.ArraySize.Y + ptCurrent.Y)
 	void DoTheFilling(function<int()> getCount, function<Point()> getNextPoint, function<void(Point)> AddPoint)
@@ -185,13 +187,12 @@ private:
 	}
 	void DrawLineRaw(Point pt0, Point pt1)
 	{
-		auto pen = CreatePen(0, 1, color);
-		color = (color + _areaFillData.ColorInc) & 0xffffff;
+		auto pen = CreatePen(0, 1, *_pColor);
+		*_pColor = (*_pColor + _areaFillData.ColorInc) & 0xffffff;
 		SelectObject(_hdc, pen);
 		MoveToEx(_hdc, pt0.X, pt0.Y, nullptr);
 		LineTo(_hdc, pt1.X, pt1.Y);
 		DeleteObject(pen);
-
 	}
 	bool DrawCell(Point pt)
 	{
@@ -204,8 +205,8 @@ private:
 				_pstats->nPtsDrawn++;
 				didDraw = true;
 				_cells[ndx] = 1;
-				color = (color + _areaFillData.ColorInc) & 0xffffff;
-				SetPixel(_hdc, pt.X, pt.Y, color);
+				*_pColor = (*_pColor + _areaFillData.ColorInc) & 0xffffff;
+				SetPixel(_hdc, pt.X, pt.Y, *_pColor);
 			}
 		}
 		return didDraw;
