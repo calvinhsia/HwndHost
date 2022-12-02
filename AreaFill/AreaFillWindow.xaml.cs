@@ -1125,7 +1125,16 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
     /*
         call "$(DevEnvDir)..\..\vc\Auxiliary\build\vcvarsall.bat" x86
         regasm.exe "$(TargetPath)"  /tlb
+
+3>RegAsm : error RA0000: An error occurred while writing the registration information to the registry. Administrator permissions are needed to use the selected options. Use an administrator command prompt to complete these tasks.
+3>C:\Program Files\Microsoft Visual Studio\2022\Preview\MSBuild\Current\Bin\amd64\Microsoft.Common.CurrentVersion.targets(5760,5): error MSB3073: The command "call "C:\Program Files\Microsoft Visual Studio\2022\Preview\Common7\IDE\..\..\vc\Auxiliary\build\vcvarsall.bat" x86
+3>C:\Program Files\Microsoft Visual Studio\2022\Preview\MSBuild\Current\Bin\amd64\Microsoft.Common.CurrentVersion.targets(5760,5): error MSB3073: regasm.exe "C:\Users\calvinh\source\repos\HwndHost\AreaFill\bin\Release\AreaFill.exe"  /tlb
+3>C:\Program Files\Microsoft Visual Studio\2022\Preview\MSBuild\Current\Bin\amd64\Microsoft.Common.CurrentVersion.targets(5760,5): error MSB3073: " exited with code 100.
+
      */
+
+
+
     [ComVisible(true)]
     [Guid("37D6D06B-C3EF-443A-B1C9-5322E411CEC6")]
     public struct AreaFillStats
