@@ -24,6 +24,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Runtime.ExceptionServices;
 using System.Collections.Concurrent;
+using System.IO;
 
 namespace AreaFill
 {
@@ -79,7 +80,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             <CheckBox Content=""FillViaPixels"" 
                 IsChecked= ""{Binding Path=FillViaPixels}"" />
             <CheckBox Content=""FillViaCPP"" 
-                IsChecked= ""{Binding Path=FillViaCPP}"" />
+                IsChecked= ""{Binding Path=FillViaCPP}"" ToolTip=""Use C++ to fill. Much faster in Release builds, but slower in debug due to debug code"" />
             <CheckBox Content=""FillAll"" 
                 IsChecked= ""{Binding Path=FillAll}"" ToolTip=""After a fill, find more to fill and fill it"" />
             <CheckBox Content=""Repeat"" 
@@ -237,7 +238,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         private bool _ResetRequired;
         public Random _rand = new Random(1);
 
-        Lazy< IAreaFill>  _iAreaFill;
+        Lazy<IAreaFill> _iAreaFill;
 
         public Point? _ptOld { get; set; }
         public bool Gravity { get; set; }
@@ -303,7 +304,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                     }
                     else
                     {// we're stopping
-                        _cts.Cancel();
+                        _cts?.Cancel();
                         Task.WaitAll(_lstTasks.ToArray());
                         Repeat = false;
                         _cts = new CancellationTokenSource();
@@ -426,33 +427,27 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
             var tcs = new TaskCompletionSource<int>();
             var tsk = Task.Run(() =>
             {
-                try
+                IsRunning = true;
+                if (FillViaCPP)
                 {
-                    IsRunning = true;
-                    if (FillViaCPP)
+                    DoFillViaCPP(_cts, ptStartFill);
+                }
+                else
+                {
+                    var oColor = _oColor;
+                    if (DepthFirst)
                     {
-                        DoFillViaCPP(_cts, ptStartFill);
+                        var stack = new Stack<Point>();
+                        stack.Push(ptStartFill);
+                        DoTheFilling(stack, () => stack.Pop(), ref oColor, (pt) => { stack.Push(pt); });
                     }
                     else
                     {
-                        var oColor = _oColor;
-                        if (DepthFirst)
-                        {
-                            var stack = new Stack<Point>();
-                            stack.Push(ptStartFill);
-                            DoTheFilling(stack, () => stack.Pop(), ref oColor, (pt) => { stack.Push(pt); });
-                        }
-                        else
-                        {
-                            var queue = new Queue<Point>();
-                            queue.Enqueue(ptStartFill);
-                            DoTheFilling(queue, () => queue.Dequeue(), ref oColor, (pt) => { queue.Enqueue(pt); });
-                        }
-                        _oColor = oColor;
+                        var queue = new Queue<Point>();
+                        queue.Enqueue(ptStartFill);
+                        DoTheFilling(queue, () => queue.Dequeue(), ref oColor, (pt) => { queue.Enqueue(pt); });
                     }
-                }
-                catch (Exception)
-                {
+                    _oColor = oColor;
                 }
                 tcs.SetResult(0);
             });
@@ -981,8 +976,23 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 var sw = Stopwatch.StartNew();
                 var tsk = DoAreaFillAsync(ptCurrent);
                 _lstTasks.Add(tsk);
-                await Task.WhenAll(_lstTasks.ToArray());
-                _lstTasks.Clear();
+                try
+                {
+                    await Task.WhenAll(_lstTasks.ToArray());
+                }
+                catch (Exception ex)
+                {
+                    if (tsk.IsFaulted)
+                    {
+                        strStatus = $"{ex}";
+                        _cts.Cancel();
+                        return;
+                    }
+                }
+                finally
+                {
+                    _lstTasks.Clear();
+                }
                 strStatus = $"{_stats.ToString()} Rate={_stats.nPtsDrawn / sw.Elapsed.TotalSeconds:n2}";
             }
             int nIter = 1;
@@ -1081,8 +1091,7 @@ xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
                 }
                 else
                 {
-                    hr = Marshal.GetHRForLastWin32Error();
-                    Debug.Assert(false, $"Unable to load {fnameComClass}: {hr}");
+                    throw new FileNotFoundException(fnameComClass);
                 }
             }
             catch (Exception ex)
